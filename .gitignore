@@ -1,2 +1,6 @@
 .env
 .DS_Store
+Security/**venv/
+Security/
+venv/
+Security/
