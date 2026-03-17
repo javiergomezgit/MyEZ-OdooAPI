@@ -5,7 +5,7 @@ and the MyEZ iOS client. Exposes clean REST endpoints consumed by the mobile
 app, with environment-based credential management and cloud deployment via Railway.
 
 ## Live API
-https://myez-odoo-api-production-87b0.up.railway.app
+https://myez-odooapi-production.up.railway.app
 
 ## Architecture
 
@@ -58,6 +58,7 @@ graph TD
 | GET | `/odoo/ping` | Odoo auth check — confirms XML-RPC connection |
 | GET | `/odoo/clients` | Returns live client list from Odoo |
 | GET | `/odoo/clients/ranking` | Returns clients ranked by inflatable weight owned. Null values handled as "No Rank Yet", ranked clients sorted first. |
+| POST | `/notify` | Sends Firebase push notification to iOS device via FCM v1 API. Params: `token`, `title`, `body` |
 
 ## Stack
 
