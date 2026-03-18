@@ -20,37 +20,28 @@ ODOO_DB = os.getenv("ODOO_DB")
 ODOO_USER = os.getenv("ODOO_USER")
 ODOO_PASSWORD = os.getenv("ODOO_PASSWORD")
 
+FIREBASE_DB_URL = "https://myezfirebase-default-rtdb.firebaseio.com"
 
-def get_access_token():
-    """Returns a short-lived OAuth2 access token for authenticating FCM API requests."""
+
+def get_db_token():
+    """Returns OAuth token scoped for Firebase Realtime Database access."""
     key_json = os.getenv("FIREBASE_SERVICE_ACCOUNT")
     if key_json:
         key_dict = json.loads(base64.b64decode(key_json).decode("utf-8"))
         credentials = service_account.Credentials.from_service_account_info(
             key_dict,
-            scopes=["https://www.googleapis.com/auth/cloud-platform"]
+            scopes=["https://www.googleapis.com/auth/firebase.database",
+                    "https://www.googleapis.com/auth/userinfo.email"]
         )
     else:
         credentials = service_account.Credentials.from_service_account_file(
             "security/firebase-service-account.json",
-            scopes=["https://www.googleapis.com/auth/cloud-platform"]
+            scopes=["https://www.googleapis.com/auth/firebase.database",
+                    "https://www.googleapis.com/auth/userinfo.email"]
         )
     request = google.auth.transport.requests.Request()
     credentials.refresh(request)
     return credentials.token
-
-
-def get_firestore_client():
-    """Returns an authenticated Firestore client using the Firebase service account."""
-    key_json = os.getenv("FIREBASE_SERVICE_ACCOUNT")
-    if key_json:
-        key_dict = json.loads(base64.b64decode(key_json).decode("utf-8"))
-        credentials = sa.Credentials.from_service_account_info(key_dict)
-    else:
-        credentials = sa.Credentials.from_service_account_file(
-            "security/firebase-service-account.json"
-        )
-    return firestore.Client(project="myezfirebase", credentials=credentials)
 
 
 @app.get("/ping")
@@ -138,32 +129,56 @@ def send_notification(token: str, title: str, body: str):
 
 @app.post("/register-token")
 def register_token(partner_id: int, token: str):
-    """Registers a device FCM token for a user in Firestore, supporting multiple devices per user."""
-    db = get_firestore_client()
-    ref = db.collection("fcm_tokens").document(str(partner_id))
-    doc = ref.get()
-    tokens = doc.to_dict().get("tokens", []) if doc.exists else []
+    """Registers a device FCM token in Firebase Realtime Database, supporting multiple devices per user."""
+    db_token = get_db_token()
+    url = f"{FIREBASE_DB_URL}/fcm_tokens/{partner_id}.json?auth={db_token}"
+
+    # Get existing tokens
+    req = urllib.request.Request(url, method="GET")
+    try:
+        with urllib.request.urlopen(req) as response:
+            data = json.loads(response.read().decode())
+            tokens = data.get("tokens", []) if data else []
+    except:
+        tokens = []
+
+    # Add token if not already present
     if token not in tokens:
         tokens.append(token)
-    ref.set({"partner_id": partner_id, "tokens": tokens})
+
+    # Save back
+    payload = json.dumps({"partner_id": partner_id, "tokens": tokens}).encode("utf-8")
+    req = urllib.request.Request(url, data=payload, method="PUT")
+    req.add_header("Content-Type", "application/json")
+    with urllib.request.urlopen(req) as response:
+        response.read()
+
     return {"success": True, "partner_id": partner_id, "devices": len(tokens)}
 
 
 @app.post("/notify/user/{partner_id}")
 def notify_user(partner_id: int, title: str, body: str):
     """Sends a push notification to all registered devices for a given Odoo partner ID."""
-    db = get_firestore_client()
-    ref = db.collection("fcm_tokens").document(str(partner_id))
-    doc = ref.get()
-    if not doc.exists:
+    db_token = get_db_token()
+    url = f"{FIREBASE_DB_URL}/fcm_tokens/{partner_id}.json?auth={db_token}"
+
+    req = urllib.request.Request(url, method="GET")
+    try:
+        with urllib.request.urlopen(req) as response:
+            data = json.loads(response.read().decode())
+    except:
+        return {"success": False, "error": "Failed to fetch tokens"}
+
+    if not data:
         return {"success": False, "error": "No devices registered for this user"}
-    tokens = doc.to_dict().get("tokens", [])
+
+    tokens = data.get("tokens", [])
     if not tokens:
         return {"success": False, "error": "No tokens for this user"}
 
     access_token = get_access_token()
     project_id = "myezfirebase"
-    url = f"https://fcm.googleapis.com/v1/projects/{project_id}/messages:send"
+    fcm_url = f"https://fcm.googleapis.com/v1/projects/{project_id}/messages:send"
     results = []
 
     for token in tokens:
@@ -176,7 +191,7 @@ def notify_user(partner_id: int, title: str, body: str):
                 }
             }).encode("utf-8")
             req = urllib.request.Request(
-                url, data=payload,
+                fcm_url, data=payload,
                 headers={
                     "Authorization": f"Bearer {access_token}",
                     "Content-Type": "application/json"
