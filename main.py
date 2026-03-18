@@ -1,8 +1,6 @@
 from fastapi import FastAPI
 from dotenv import load_dotenv
 from google.oauth2 import service_account
-from google.oauth2 import service_account as sa
-from google.cloud import firestore
 import google.auth.transport.requests
 import xmlrpc.client
 import urllib.request
