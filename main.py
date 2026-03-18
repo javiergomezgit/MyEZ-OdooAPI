@@ -266,26 +266,22 @@ def check_rank_changes():
     notifications_sent = []
     updated_cache = dict(rank_cache)
 
-    # Step 3 — compare current rank to cached rank
+   # Step 3 — compare current rank to cached rank
     for client in clients:
         partner_id = client["id"]
         name = client["name"]
         weight = client["x_studio_rank_weight"]
 
-        if weight in [False, None, ""]:
-            weight = 0
-
         try:
             weight = int(float(str(weight))) if weight not in [False, None, ""] else 0
-            except (ValueError, TypeError):
-                weight = 0
-                current_rank = get_rank(weight)
+        except (ValueError, TypeError):
+            weight = 0
 
+        current_rank = get_rank(weight)
         previous_rank = rank_cache.get(str(partner_id))
 
         # Step 4 — if rank changed, send notification
         if previous_rank and previous_rank != current_rank:
-            # Fetch FCM tokens for this user
             tokens_url = f"{FIREBASE_DB_URL}/users/{partner_id}/fcmTokens.json?auth={db_token}"
             req = urllib.request.Request(tokens_url, method="GET")
             try:
@@ -329,7 +325,6 @@ def check_rank_changes():
                     "previous_rank": previous_rank,
                     "current_rank": current_rank
                 })
-
         # Step 5 — update cache with current rank
         updated_cache[str(partner_id)] = current_rank
 
