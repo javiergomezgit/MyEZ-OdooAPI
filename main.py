@@ -17,8 +17,7 @@ ODOO_URL = os.getenv("ODOO_URL")
 ODOO_DB = os.getenv("ODOO_DB")
 ODOO_USER = os.getenv("ODOO_USER")
 ODOO_PASSWORD = os.getenv("ODOO_PASSWORD")
-
-FIREBASE_DB_URL = "https://myezfirebase.firebaseio.com/"
+FIREBASE_DB_URL = "https://myezfirebase.firebaseio.com"
 
 
 def get_db_token():
@@ -36,6 +35,25 @@ def get_db_token():
             "security/firebase-service-account.json",
             scopes=["https://www.googleapis.com/auth/firebase.database",
                     "https://www.googleapis.com/auth/userinfo.email"]
+        )
+    request = google.auth.transport.requests.Request()
+    credentials.refresh(request)
+    return credentials.token
+
+
+def get_access_token():
+    """Returns a short-lived OAuth2 access token for authenticating FCM API requests."""
+    key_json = os.getenv("FIREBASE_SERVICE_ACCOUNT")
+    if key_json:
+        key_dict = json.loads(base64.b64decode(key_json).decode("utf-8"))
+        credentials = service_account.Credentials.from_service_account_info(
+            key_dict,
+            scopes=["https://www.googleapis.com/auth/cloud-platform"]
+        )
+    else:
+        credentials = service_account.Credentials.from_service_account_file(
+            "security/firebase-service-account.json",
+            scopes=["https://www.googleapis.com/auth/cloud-platform"]
         )
     request = google.auth.transport.requests.Request()
     credentials.refresh(request)
@@ -131,7 +149,6 @@ def register_token(partner_id: int, token: str):
     db_token = get_db_token()
     url = f"{FIREBASE_DB_URL}/users/{partner_id}/fcmTokens.json?auth={db_token}"
 
-    # Get existing tokens
     req = urllib.request.Request(url, method="GET")
     try:
         with urllib.request.urlopen(req) as response:
@@ -140,11 +157,9 @@ def register_token(partner_id: int, token: str):
     except:
         tokens = []
 
-    # Add token if not already present
     if token not in tokens:
         tokens.append(token)
 
-    # Save back
     payload = json.dumps(tokens).encode("utf-8")
     req = urllib.request.Request(url, data=payload, method="PUT")
     req.add_header("Content-Type", "application/json")
