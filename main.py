@@ -13,6 +13,8 @@ load_dotenv()
 
 app = FastAPI()
 
+TOKEN_FILE = "tokens.json"
+
 ODOO_URL = os.getenv("ODOO_URL")
 ODOO_DB = os.getenv("ODOO_DB")
 ODOO_USER = os.getenv("ODOO_USER")
@@ -34,6 +36,17 @@ def get_access_token():
     request = google.auth.transport.requests.Request()
     credentials.refresh(request)
     return credentials.token
+
+def load_tokens():
+    if os.path.exists(TOKEN_FILE):
+        with open(TOKEN_FILE, "r") as f:
+            return json.load(f)
+    return {}
+
+def save_tokens(tokens):
+    with open(TOKEN_FILE, "w") as f:
+        json.dump(tokens, f)
+        
 
 @app.get("/ping")
 def ping():
@@ -116,3 +129,50 @@ def send_notification(token: str, title: str, body: str):
         return {"success": False, "error": error_body}
     except Exception as e:
         return {"success": False, "error": str(e)}
+
+@app.post("/register-token")
+def register_token(partner_id: int, token: str):
+    tokens = load_tokens()
+    key = str(partner_id)
+    if key not in tokens:
+        tokens[key] = []
+    if token not in tokens[key]:
+        tokens[key].append(token)
+    save_tokens(tokens)
+    return {"success": True, "partner_id": partner_id, "devices": len(tokens[key])}
+
+@app.post("/notify/user/{partner_id}")
+def notify_user(partner_id: int, title: str, body: str):
+    tokens = load_tokens()
+    key = str(partner_id)
+    if key not in tokens or not tokens[key]:
+        return {"success": False, "error": "No devices registered for this user"}
+    
+    results = []
+    access_token = get_access_token()
+    project_id = "myezfirebase"
+    url = f"https://fcm.googleapis.com/v1/projects/{project_id}/messages:send"
+    
+    for token in tokens[key]:
+        try:
+            payload = json.dumps({
+                "message": {
+                    "token": token,
+                    "notification": {"title": title, "body": body},
+                    "apns": {"headers": {"apns-environment": "development"}}
+                }
+            }).encode("utf-8")
+            req = urllib.request.Request(
+                url, data=payload,
+                headers={
+                    "Authorization": f"Bearer {access_token}",
+                    "Content-Type": "application/json"
+                },
+                method="POST"
+            )
+            with urllib.request.urlopen(req) as response:
+                results.append({"token": token[:20], "success": True})
+        except urllib.error.HTTPError as e:
+            results.append({"token": token[:20], "success": False, "error": e.read().decode()})
+    
+    return {"success": True, "results": results}
