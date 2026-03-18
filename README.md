@@ -59,6 +59,8 @@ graph TD
 | GET | `/odoo/clients` | Returns live client list from Odoo |
 | GET | `/odoo/clients/ranking` | Returns clients ranked by inflatable weight owned. Null values handled as "No Rank Yet", ranked clients sorted first. |
 | POST | `/notify` | Sends Firebase push notification to iOS device via FCM v1 API. Params: `token`, `title`, `body` |
+| POST | `/register-token` | Registers a device FCM token for a user in Firebase Realtime Database. Supports multiple devices per user. Params: partner_id, token |
+| POST | `/notify/user/{partner_id}` | Sends push notification to all registered devices for an Odoo partner. Params: title, body
 
 ## Stack
 
