@@ -127,16 +127,16 @@ def send_notification(token: str, title: str, body: str):
 
 @app.post("/register-token")
 def register_token(partner_id: int, token: str):
-    """Registers a device FCM token in Firebase Realtime Database, supporting multiple devices per user."""
+    """Registers a device FCM token under users/{partner_id}/fcmTokens in Firebase Realtime Database."""
     db_token = get_db_token()
-    url = f"{FIREBASE_DB_URL}/fcm_tokens/{partner_id}.json?auth={db_token}"
+    url = f"{FIREBASE_DB_URL}/users/{partner_id}/fcmTokens.json?auth={db_token}"
 
     # Get existing tokens
     req = urllib.request.Request(url, method="GET")
     try:
         with urllib.request.urlopen(req) as response:
             data = json.loads(response.read().decode())
-            tokens = data.get("tokens", []) if data else []
+            tokens = data if isinstance(data, list) else []
     except:
         tokens = []
 
@@ -145,7 +145,7 @@ def register_token(partner_id: int, token: str):
         tokens.append(token)
 
     # Save back
-    payload = json.dumps({"partner_id": partner_id, "tokens": tokens}).encode("utf-8")
+    payload = json.dumps(tokens).encode("utf-8")
     req = urllib.request.Request(url, data=payload, method="PUT")
     req.add_header("Content-Type", "application/json")
     with urllib.request.urlopen(req) as response:
@@ -158,21 +158,18 @@ def register_token(partner_id: int, token: str):
 def notify_user(partner_id: int, title: str, body: str):
     """Sends a push notification to all registered devices for a given Odoo partner ID."""
     db_token = get_db_token()
-    url = f"{FIREBASE_DB_URL}/fcm_tokens/{partner_id}.json?auth={db_token}"
+    url = f"{FIREBASE_DB_URL}/users/{partner_id}/fcmTokens.json?auth={db_token}"
 
     req = urllib.request.Request(url, method="GET")
     try:
         with urllib.request.urlopen(req) as response:
             data = json.loads(response.read().decode())
+            tokens = data if isinstance(data, list) else []
     except:
         return {"success": False, "error": "Failed to fetch tokens"}
 
-    if not data:
-        return {"success": False, "error": "No devices registered for this user"}
-
-    tokens = data.get("tokens", [])
     if not tokens:
-        return {"success": False, "error": "No tokens for this user"}
+        return {"success": False, "error": "No devices registered for this user"}
 
     access_token = get_access_token()
     project_id = "myezfirebase"
