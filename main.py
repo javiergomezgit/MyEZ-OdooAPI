@@ -275,7 +275,12 @@ def check_rank_changes():
         if weight in [False, None, ""]:
             weight = 0
 
-        current_rank = get_rank(int(weight))
+        try:
+            weight = int(float(str(weight))) if weight not in [False, None, ""] else 0
+            except (ValueError, TypeError):
+                weight = 0
+                current_rank = get_rank(weight)
+
         previous_rank = rank_cache.get(str(partner_id))
 
         # Step 4 — if rank changed, send notification
