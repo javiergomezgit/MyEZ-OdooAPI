@@ -18,7 +18,7 @@ ODOO_DB = os.getenv("ODOO_DB")
 ODOO_USER = os.getenv("ODOO_USER")
 ODOO_PASSWORD = os.getenv("ODOO_PASSWORD")
 
-FIREBASE_DB_URL = "https://myezfirebase-default-rtdb.firebaseio.com"
+FIREBASE_DB_URL = "https://myezfirebase.firebaseio.com/"
 
 
 def get_db_token():
