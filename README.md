@@ -61,14 +61,39 @@ graph TD
 | POST | `/notify` | Sends Firebase push notification to iOS device via FCM v1 API. Params: `token`, `title`, `body` |
 | POST | `/register-token` | Registers a device FCM token for a user in Firebase Realtime Database. Supports multiple devices per user. Params: partner_id, token |
 | POST | `/notify/user/{partner_id}` | Sends push notification to all registered devices for an Odoo partner. Params: title, body
+| POST | `/odoo/check-rank-changes` | Reads owned weight from Firebase, detects rank tier changes, sends rank-up notifications, and updates rank cache. |
+
+## Rank Tiers
+
+| Rank | Weight Threshold |
+|------|-----------------|
+| Minimumweight | < 2,500 lb |
+| Flyweight | < 5,000 lb |
+| Bantamweight | < 7,500 lb |
+| Featherweight | < 10,000 lb |
+| Lightweight | < 12,500 lb |
+| Welterweight | < 15,000 lb |
+| Middleweight | < 17,500 lb |
+| Cruiserweight | < 20,000 lb |
+| Heavyweight | 20,001 lb+ |
 
 ## Stack
 
 - **FastAPI** — REST API middleware layer
-- **Odoo XML-RPC** — ERP data source (res.partner, custom rank weight field)
+- **Odoo XML-RPC** — ERP data source (res.partner, account.move)
 - **Railway** — PaaS cloud deployment
+- **Firebase Realtime Database** — FCM token storage, rank cache, user data
+- **Firebase Cloud Messaging** — iOS push notifications via FCM v1 API
+- **Google Cloud Run** — Odoo → Firebase bidirectional sync service
 - **SwiftUI/iOS** — mobile client consuming this API
-- **Firebase** — push notifications (planned)
+
+## System Flow
+
+1. Odoo invoice confirmed → server action triggers Google Cloud Run
+2. Cloud Run calculates rank from owned weight → writes to Firebase + back to Odoo
+3. If rank changed → Cloud Run calls FastAPI /notify/user/{partner_id} automatically
+4. iOS app login → FCM token registered via /register-token → stored in Firebase
+5. FastAPI delivers push notification to all user devices via FCM v1 API
 
 ## Security
 
