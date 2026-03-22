@@ -21,10 +21,10 @@ graph TD
         G[GET /odoo/ping]
         H[GET /odoo/clients]
         I[GET /odoo/clients/ranking]
-        J[GET /clients/owned-units]
+        J[GET /clients/owned-units/partner_id]
         K[POST /notify]
         L[POST /register-token]
-        M[POST /notify/user/{partner_id}]
+        M[POST /notify/user/partner_id]
     end
 
     subgraph Odoo["🗄️ Odoo ERP"]
@@ -40,10 +40,10 @@ graph TD
 
     subgraph Firebase["🔥 Firebase"]
         S[Realtime Database]
-        T[users/{partner_id}/fcmTokens]
-        U[users/{partner_id}/typeuser]
-        V[users/{partner_id}/owned_weight]
-        W[users/{partner_id}/units]
+        T[users/partner_id/fcmTokens]
+        U[users/partner_id/typeuser]
+        V[users/partner_id/owned_weight]
+        W[users/partner_id/units]
         X[FCM Push Notifications]
     end
 
