@@ -366,3 +366,55 @@ def get_owned_units(partner_id: int):
         "rank": typeuser,
         "units": units
     }
+
+#===============================================
+
+@app.get("/products")
+def get_products():
+    """Returns published products from Odoo shop with name, price, and image URL."""
+    common = xmlrpc.client.ServerProxy(f"{ODOO_URL}/xmlrpc/2/common")
+    uid = common.authenticate(ODOO_DB, ODOO_USER, ODOO_PASSWORD, {})
+    models = xmlrpc.client.ServerProxy(f"{ODOO_URL}/xmlrpc/2/object")
+    products = models.execute_kw(
+        ODOO_DB, uid, ODOO_PASSWORD,
+        'product.template', 'search_read',
+        [[['is_published', '=', True], ['sale_ok', '=', True]]],
+        {'fields': ['name', 'list_price', 'description_sale', 'categ_id', 'image_1920'], 'limit': 50}
+    )
+    result = []
+    for p in products:
+        result.append({
+            "id": p["id"],
+            "name": p["name"],
+            "price": p["list_price"],
+            "description": p["description_sale"] or "",
+            "category": p["categ_id"][1] if p["categ_id"] else "Uncategorized",
+            "image_url": f"{ODOO_URL}/web/image/product.template/{p['id']}/image_1920"
+        })
+    return {"products": result}
+
+
+@app.get("/products/{product_id}")
+def get_product(product_id: int):
+    """Returns full details for a single product by ID."""
+    common = xmlrpc.client.ServerProxy(f"{ODOO_URL}/xmlrpc/2/common")
+    uid = common.authenticate(ODOO_DB, ODOO_USER, ODOO_PASSWORD, {})
+    models = xmlrpc.client.ServerProxy(f"{ODOO_URL}/xmlrpc/2/object")
+    products = models.execute_kw(
+        ODOO_DB, uid, ODOO_PASSWORD,
+        'product.template', 'search_read',
+        [[['id', '=', product_id]]],
+        {'fields': ['name', 'list_price', 'description_sale', 'categ_id', 'image_1920']}
+    )
+    if not products:
+        return {"success": False, "error": "Product not found"}
+    p = products[0]
+    return {
+        "success": True,
+        "id": p["id"],
+        "name": p["name"],
+        "price": p["list_price"],
+        "description": p["description_sale"] or "",
+        "category": p["categ_id"][1] if p["categ_id"] else "Uncategorized",
+        "image_url": f"{ODOO_URL}/web/image/product.template/{p['id']}/image_1920"
+    }
