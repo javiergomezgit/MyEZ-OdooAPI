@@ -338,3 +338,31 @@ def check_rank_changes():
         "notifications_sent": len(notifications_sent),
         "changes": notifications_sent
     }
+
+@app.get("/clients/owned-units/{partner_id}")
+def get_owned_units(partner_id: int):
+    """Returns owned inflatable units and total weight for a specific customer from Firebase."""
+    db_token = get_db_token()
+    url = f"{FIREBASE_DB_URL}/users/{partner_id}.json?auth={db_token}"
+
+    req = urllib.request.Request(url, method="GET")
+    try:
+        with urllib.request.urlopen(req) as response:
+            data = json.loads(response.read().decode())
+    except:
+        return {"success": False, "error": "Failed to fetch user data"}
+
+    if not data:
+        return {"success": False, "error": "User not found"}
+
+    units = data.get("units", {})
+    owned_weight = data.get("owned_weight", 0)
+    typeuser = data.get("typeuser", "minimumweight")
+
+    return {
+        "success": True,
+        "partner_id": partner_id,
+        "owned_weight": owned_weight,
+        "rank": typeuser,
+        "units": units
+    }
