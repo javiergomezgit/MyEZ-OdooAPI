@@ -13,12 +13,35 @@ load_dotenv()
 
 app = FastAPI()
 
+# ================================================================
+# CONFIGURATION
+# Environment variables — set in .env locally, Railway in production
+# ================================================================
+
 ODOO_URL = os.getenv("ODOO_URL")
 ODOO_DB = os.getenv("ODOO_DB")
 ODOO_USER = os.getenv("ODOO_USER")
 ODOO_PASSWORD = os.getenv("ODOO_PASSWORD")
 FIREBASE_DB_URL = "https://myezfirebase.firebaseio.com"
 
+# Rank tier thresholds in lbs — used for gamification logic
+RANK_TIERS = [
+    (2500, "Minimumweight"),
+    (5000, "Flyweight"),
+    (7500, "Bantamweight"),
+    (10000, "Featherweight"),
+    (12500, "Lightweight"),
+    (15000, "Welterweight"),
+    (17500, "Middleweight"),
+    (20000, "Cruiserweight"),
+    (float("inf"), "Heavyweight"),
+]
+
+
+# ================================================================
+# HELPERS
+# Shared utility functions used across multiple endpoints
+# ================================================================
 
 def get_db_token():
     """Returns OAuth token scoped for Firebase Realtime Database access."""
@@ -60,6 +83,27 @@ def get_access_token():
     return credentials.token
 
 
+def get_rank(weight: int) -> str:
+    """Returns the rank tier name based on total owned weight in lbs."""
+    for threshold, rank in RANK_TIERS:
+        if weight < threshold:
+            return rank
+    return "Heavyweight"
+
+
+def odoo_authenticate():
+    """Authenticates with Odoo via XML-RPC and returns (uid, models proxy)."""
+    common = xmlrpc.client.ServerProxy(f"{ODOO_URL}/xmlrpc/2/common")
+    uid = common.authenticate(ODOO_DB, ODOO_USER, ODOO_PASSWORD, {})
+    models = xmlrpc.client.ServerProxy(f"{ODOO_URL}/xmlrpc/2/object")
+    return uid, models
+
+
+# ================================================================
+# HEALTH CHECK
+# Used to verify API and Odoo connectivity
+# ================================================================
+
 @app.get("/ping")
 def ping():
     """Health check — confirms the API is live."""
@@ -69,17 +113,19 @@ def ping():
 @app.get("/odoo/ping")
 def odoo_ping():
     """Odoo auth check — confirms XML-RPC connection to Odoo is working."""
-    common = xmlrpc.client.ServerProxy(f"{ODOO_URL}/xmlrpc/2/common")
-    uid = common.authenticate(ODOO_DB, ODOO_USER, ODOO_PASSWORD, {})
+    uid, _ = odoo_authenticate()
     return {"odoo_uid": uid}
 
+
+# ================================================================
+# CLIENTS
+# Endpoints for customer data from Odoo and Firebase
+# ================================================================
 
 @app.get("/odoo/clients")
 def get_clients():
     """Returns a list of active customers from Odoo with name, email, and phone."""
-    common = xmlrpc.client.ServerProxy(f"{ODOO_URL}/xmlrpc/2/common")
-    uid = common.authenticate(ODOO_DB, ODOO_USER, ODOO_PASSWORD, {})
-    models = xmlrpc.client.ServerProxy(f"{ODOO_URL}/xmlrpc/2/object")
+    uid, models = odoo_authenticate()
     clients = models.execute_kw(
         ODOO_DB, uid, ODOO_PASSWORD,
         'res.partner', 'search_read',
@@ -92,9 +138,7 @@ def get_clients():
 @app.get("/odoo/clients/ranking")
 def get_client_ranking():
     """Returns clients ranked by inflatable weight owned. Null ranks handled as 'No Rank Yet', ranked clients sorted first."""
-    common = xmlrpc.client.ServerProxy(f"{ODOO_URL}/xmlrpc/2/common")
-    uid = common.authenticate(ODOO_DB, ODOO_USER, ODOO_PASSWORD, {})
-    models = xmlrpc.client.ServerProxy(f"{ODOO_URL}/xmlrpc/2/object")
+    uid, models = odoo_authenticate()
     clients = models.execute_kw(
         ODOO_DB, uid, ODOO_PASSWORD,
         'res.partner', 'search_read',
@@ -110,6 +154,116 @@ def get_client_ranking():
         for c in clients
     ]
     return {"clients": result}
+
+
+@app.get("/clients/owned-units/{partner_id}")
+def get_owned_units(partner_id: int):
+    """Returns owned inflatable units, total weight, and rank tier for a specific customer from Firebase."""
+    db_token = get_db_token()
+    url = f"{FIREBASE_DB_URL}/users/{partner_id}.json?auth={db_token}"
+
+    req = urllib.request.Request(url, method="GET")
+    try:
+        with urllib.request.urlopen(req) as response:
+            data = json.loads(response.read().decode())
+    except:
+        return {"success": False, "error": "Failed to fetch user data"}
+
+    if not data:
+        return {"success": False, "error": "User not found"}
+
+    return {
+        "success": True,
+        "partner_id": partner_id,
+        "owned_weight": data.get("owned_weight", 0),
+        "rank": data.get("typeuser", "minimumweight"),
+        "units": data.get("units", {})
+    }
+
+
+# ================================================================
+# PRODUCTS
+# Endpoints for product catalog from Odoo shop
+# Future: add /products/categories, /products/search, /products/featured
+# ================================================================
+
+@app.get("/products")
+def get_products():
+    """Returns published products from Odoo shop with name, price, category, and image URL."""
+    uid, models = odoo_authenticate()
+    products = models.execute_kw(
+        ODOO_DB, uid, ODOO_PASSWORD,
+        'product.template', 'search_read',
+        [[['is_published', '=', True], ['sale_ok', '=', True]]],
+        {'fields': ['name', 'list_price', 'description_sale', 'categ_id', 'image_1920'], 'limit': 50}
+    )
+    result = []
+    for p in products:
+        result.append({
+            "id": p["id"],
+            "name": p["name"],
+            "price": p["list_price"],
+            "description": p["description_sale"] or "",
+            "category": p["categ_id"][1] if p["categ_id"] else "Uncategorized",
+            "image_url": f"{ODOO_URL}/web/image/product.template/{p['id']}/image_1920"
+        })
+    return {"products": result}
+
+
+@app.get("/products/{product_id}")
+def get_product(product_id: int):
+    """Returns full details for a single product by ID."""
+    uid, models = odoo_authenticate()
+    products = models.execute_kw(
+        ODOO_DB, uid, ODOO_PASSWORD,
+        'product.template', 'search_read',
+        [[['id', '=', product_id]]],
+        {'fields': ['name', 'list_price', 'description_sale', 'categ_id', 'image_1920']}
+    )
+    if not products:
+        return {"success": False, "error": "Product not found"}
+    p = products[0]
+    return {
+        "success": True,
+        "id": p["id"],
+        "name": p["name"],
+        "price": p["list_price"],
+        "description": p["description_sale"] or "",
+        "category": p["categ_id"][1] if p["categ_id"] else "Uncategorized",
+        "image_url": f"{ODOO_URL}/web/image/product.template/{p['id']}/image_1920"
+    }
+
+
+# ================================================================
+# NOTIFICATIONS
+# FCM push notification endpoints — token registration and delivery
+# Future: add /notify/broadcast (all users), /notify/rank/{rank_tier}
+# ================================================================
+
+@app.post("/register-token")
+def register_token(partner_id: int, token: str):
+    """Registers a device FCM token under users/{partner_id}/fcmTokens in Firebase. Supports multiple devices per user."""
+    db_token = get_db_token()
+    url = f"{FIREBASE_DB_URL}/users/{partner_id}/fcmTokens.json?auth={db_token}"
+
+    req = urllib.request.Request(url, method="GET")
+    try:
+        with urllib.request.urlopen(req) as response:
+            data = json.loads(response.read().decode())
+            tokens = data if isinstance(data, list) else []
+    except:
+        tokens = []
+
+    if token not in tokens:
+        tokens.append(token)
+
+    payload = json.dumps(tokens).encode("utf-8")
+    req = urllib.request.Request(url, data=payload, method="PUT")
+    req.add_header("Content-Type", "application/json")
+    with urllib.request.urlopen(req) as response:
+        response.read()
+
+    return {"success": True, "partner_id": partner_id, "devices": len(tokens)}
 
 
 @app.post("/notify")
@@ -141,32 +295,6 @@ def send_notification(token: str, title: str, body: str):
         return {"success": False, "error": e.read().decode()}
     except Exception as e:
         return {"success": False, "error": str(e)}
-
-
-@app.post("/register-token")
-def register_token(partner_id: int, token: str):
-    """Registers a device FCM token under users/{partner_id}/fcmTokens in Firebase Realtime Database."""
-    db_token = get_db_token()
-    url = f"{FIREBASE_DB_URL}/users/{partner_id}/fcmTokens.json?auth={db_token}"
-
-    req = urllib.request.Request(url, method="GET")
-    try:
-        with urllib.request.urlopen(req) as response:
-            data = json.loads(response.read().decode())
-            tokens = data if isinstance(data, list) else []
-    except:
-        tokens = []
-
-    if token not in tokens:
-        tokens.append(token)
-
-    payload = json.dumps(tokens).encode("utf-8")
-    req = urllib.request.Request(url, data=payload, method="PUT")
-    req.add_header("Content-Type", "application/json")
-    with urllib.request.urlopen(req) as response:
-        response.read()
-
-    return {"success": True, "partner_id": partner_id, "devices": len(tokens)}
 
 
 @app.post("/notify/user/{partner_id}")
@@ -216,35 +344,18 @@ def notify_user(partner_id: int, title: str, body: str):
     return {"success": True, "results": results}
 
 
-"""========================================================================================================================"""
-
-RANK_TIERS = [
-    (2500, "Minimumweight"),
-    (5000, "Flyweight"),
-    (7500, "Bantamweight"),
-    (10000, "Featherweight"),
-    (12500, "Lightweight"),
-    (15000, "Welterweight"),
-    (17500, "Middleweight"),
-    (20000, "Cruiserweight"),
-    (float("inf"), "Heavyweight"),
-]
-
-def get_rank(weight: int) -> str:
-    """Returns the rank tier name based on total owned weight."""
-    for threshold, rank in RANK_TIERS:
-        if weight < threshold:
-            return rank
-    return "Heavyweight"
-
+# ================================================================
+# GAMIFICATION — RANK CHANGES
+# Manual bulk rank check — useful for backfill or admin triggers
+# Automatic rank change detection is handled by Google Cloud Run
+# ================================================================
 
 @app.post("/odoo/check-rank-changes")
 def check_rank_changes():
-    """Checks all users in Firebase for rank tier changes based on owned_weight. Sends push notification to affected users."""
-
+    """Manual bulk check — reads owned_weight from Firebase, detects rank tier changes, sends push notifications."""
     db_token = get_db_token()
 
-    # Step 1 — fetch all users from Firebase
+    # Fetch all users from Firebase
     users_url = f"{FIREBASE_DB_URL}/users.json?auth={db_token}"
     req = urllib.request.Request(users_url, method="GET")
     try:
@@ -253,7 +364,7 @@ def check_rank_changes():
     except:
         return {"success": False, "error": "Failed to fetch users from Firebase"}
 
-    # Step 2 — fetch rank cache from Firebase
+    # Fetch rank cache
     ranks_url = f"{FIREBASE_DB_URL}/rank_cache.json?auth={db_token}"
     req = urllib.request.Request(ranks_url, method="GET")
     try:
@@ -265,7 +376,6 @@ def check_rank_changes():
     notifications_sent = []
     updated_cache = dict(rank_cache)
 
-    # Step 3 — compare current rank to cached rank
     for partner_id, user_data in users.items():
         if not isinstance(user_data, dict):
             continue
@@ -281,7 +391,6 @@ def check_rank_changes():
         current_rank = get_rank(weight)
         previous_rank = rank_cache.get(str(partner_id))
 
-        # Step 4 — if rank changed send notification
         if previous_rank and previous_rank != current_rank:
             tokens = user_data.get("fcmTokens", [])
             if not isinstance(tokens, list):
@@ -322,10 +431,9 @@ def check_rank_changes():
                     "current_rank": current_rank
                 })
 
-        # Step 5 — update cache
         updated_cache[str(partner_id)] = current_rank
 
-    # Step 6 — save updated rank cache
+    # Save updated rank cache
     payload = json.dumps(updated_cache).encode("utf-8")
     req = urllib.request.Request(ranks_url, data=payload, method="PUT")
     req.add_header("Content-Type", "application/json")
@@ -339,82 +447,27 @@ def check_rank_changes():
         "changes": notifications_sent
     }
 
-@app.get("/clients/owned-units/{partner_id}")
-def get_owned_units(partner_id: int):
-    """Returns owned inflatable units and total weight for a specific customer from Firebase."""
-    db_token = get_db_token()
-    url = f"{FIREBASE_DB_URL}/users/{partner_id}.json?auth={db_token}"
 
-    req = urllib.request.Request(url, method="GET")
-    try:
-        with urllib.request.urlopen(req) as response:
-            data = json.loads(response.read().decode())
-    except:
-        return {"success": False, "error": "Failed to fetch user data"}
-
-    if not data:
-        return {"success": False, "error": "User not found"}
-
-    units = data.get("units", {})
-    owned_weight = data.get("owned_weight", 0)
-    typeuser = data.get("typeuser", "minimumweight")
-
-    return {
-        "success": True,
-        "partner_id": partner_id,
-        "owned_weight": owned_weight,
-        "rank": typeuser,
-        "units": units
-    }
-
-#===============================================
-
-@app.get("/products")
-def get_products():
-    """Returns published products from Odoo shop with name, price, and image URL."""
-    common = xmlrpc.client.ServerProxy(f"{ODOO_URL}/xmlrpc/2/common")
-    uid = common.authenticate(ODOO_DB, ODOO_USER, ODOO_PASSWORD, {})
-    models = xmlrpc.client.ServerProxy(f"{ODOO_URL}/xmlrpc/2/object")
-    products = models.execute_kw(
-        ODOO_DB, uid, ODOO_PASSWORD,
-        'product.template', 'search_read',
-        [[['is_published', '=', True], ['sale_ok', '=', True]]],
-        {'fields': ['name', 'list_price', 'description_sale', 'categ_id', 'image_1920'], 'limit': 50}
-    )
-    result = []
-    for p in products:
-        result.append({
-            "id": p["id"],
-            "name": p["name"],
-            "price": p["list_price"],
-            "description": p["description_sale"] or "",
-            "category": p["categ_id"][1] if p["categ_id"] else "Uncategorized",
-            "image_url": f"{ODOO_URL}/web/image/product.template/{p['id']}/image_1920"
-        })
-    return {"products": result}
+# ================================================================
+# FUTURE — AUTH
+# Add login/signup endpoints here to replace direct Odoo XML-RPC from iOS
+# POST /auth/login   — email + password → returns user profile + session
+# POST /auth/signup  — name + email + password → creates Odoo user
+# ================================================================
 
 
-@app.get("/products/{product_id}")
-def get_product(product_id: int):
-    """Returns full details for a single product by ID."""
-    common = xmlrpc.client.ServerProxy(f"{ODOO_URL}/xmlrpc/2/common")
-    uid = common.authenticate(ODOO_DB, ODOO_USER, ODOO_PASSWORD, {})
-    models = xmlrpc.client.ServerProxy(f"{ODOO_URL}/xmlrpc/2/object")
-    products = models.execute_kw(
-        ODOO_DB, uid, ODOO_PASSWORD,
-        'product.template', 'search_read',
-        [[['id', '=', product_id]]],
-        {'fields': ['name', 'list_price', 'description_sale', 'categ_id', 'image_1920']}
-    )
-    if not products:
-        return {"success": False, "error": "Product not found"}
-    p = products[0]
-    return {
-        "success": True,
-        "id": p["id"],
-        "name": p["name"],
-        "price": p["list_price"],
-        "description": p["description_sale"] or "",
-        "category": p["categ_id"][1] if p["categ_id"] else "Uncategorized",
-        "image_url": f"{ODOO_URL}/web/image/product.template/{p['id']}/image_1920"
-    }
+# ================================================================
+# FUTURE — ORDERS
+# Add order history endpoints here
+# GET /orders/{partner_id}         — returns order history from Odoo
+# GET /orders/{partner_id}/{order_id} — returns single order detail
+# ================================================================
+
+
+# ================================================================
+# FUTURE — CART / CHECKOUT
+# Add cart and checkout endpoints here if moving away from WebView
+# POST /cart/add     — add product to cart
+# POST /cart/remove  — remove product from cart
+# POST /checkout     — submit order to Odoo
+# ================================================================
