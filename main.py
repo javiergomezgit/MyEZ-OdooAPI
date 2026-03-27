@@ -247,7 +247,7 @@ def get_product_image(sku: str):
         "Content-Type": "application/json"
     }
 
-    folder_path = f"/EZ Inflatables Dropbox/Javier Gomez/MainImages (1)/{sku}/{sku}-PNG"
+    folder_path = f"/MainImages (1)/{sku}/{sku}-PNG"
 
     # Try to create a shared link
     link_resp = requests.post(
