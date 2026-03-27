@@ -184,6 +184,7 @@ def get_owned_units(partner_id: int):
 # ================================================================
 # PRODUCTS
 # Endpoints for product catalog from Odoo shop
+# Endpoints for png links of the products from Dropbox
 # Future: add /products/categories, /products/search, /products/featured
 # ================================================================
 
@@ -232,6 +233,44 @@ def get_product(product_id: int):
         "category": p["categ_id"][1] if p["categ_id"] else "Uncategorized",
         "image_url": f"{ODOO_URL}/web/image/product.template/{p['id']}/image_1920"
     }
+
+
+@app.get("/products/image/{sku}")
+def get_product_image(sku: str):
+    token = os.getenv("DROPBOX_TOKEN")
+    if not token:
+        return {"error": "Dropbox token not configured"}
+
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Content-Type": "application/json"
+    }
+
+    folder_path = f"/EZ Inflatables Dropbox/Javier Gomez/MainImages (1)/{sku}/{sku}-PNG"
+
+    # Try to create a shared link
+    link_resp = requests.post(
+        "https://api.dropboxapi.com/2/sharing/create_shared_link_with_settings",
+        headers=headers,
+        json={"path": folder_path}
+    )
+
+    # If link already exists, fetch it instead
+    if link_resp.status_code == 409:
+        existing_resp = requests.post(
+            "https://api.dropboxapi.com/2/sharing/list_shared_links",
+            headers=headers,
+            json={"path": folder_path, "direct_only": True}
+        )
+        links = existing_resp.json().get("links", [])
+        if links:
+            return {"url": links[0]["url"], "sku": sku}
+        return {"error": "Could not retrieve shared link", "sku": sku}
+
+    if link_resp.status_code != 200:
+        return {"error": "Folder not found", "sku": sku}
+
+    return {"url": link_resp.json().get("url"), "sku": sku}
 
 
 # ================================================================
