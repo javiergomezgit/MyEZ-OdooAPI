@@ -8,6 +8,7 @@ import urllib.error
 import base64
 import json
 import os
+import requests
 
 load_dotenv()
 
