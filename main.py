@@ -129,7 +129,7 @@ def get_clients():
     uid, models = odoo_authenticate()
     clients = models.execute_kw(
         ODOO_DB, uid, ODOO_PASSWORD,
-        'res.partner', 'search_read',
+        'res.partner', 'search_read',d
         [[['customer_rank', '>', 0]]],
         {'fields': ['name', 'email', 'phone'], 'limit': 5}
     )
@@ -238,7 +238,7 @@ def get_product(product_id: int):
 
 @app.get("/products/image/{sku}")
 def get_product_image(sku: str):
-    token = os.getenv("DROPBOX_TOKEN")
+    token = get_dropbox_token()
     if not token:
         return {"error": "Dropbox token not configured"}
 
@@ -273,6 +273,29 @@ def get_product_image(sku: str):
 
     return {"url": link_resp.json().get("url"), "sku": sku}
 
+
+def get_dropbox_token() -> str:
+    token = os.getenv("DROPBOX_TOKEN")
+    refresh_token = os.getenv("DROPBOX_REFRESH_TOKEN")
+    app_key = os.getenv("DROPBOX_APP_KEY")
+    app_secret = os.getenv("DROPBOX_APP_SECRET")
+
+    # Try current token first
+    test = requests.post(
+        "https://api.dropboxapi.com/2/users/get_current_account",
+        headers={"Authorization": f"Bearer {token}"}
+    )
+    if test.status_code == 200:
+        return token
+
+    # Token expired — refresh it
+    resp = requests.post(
+        "https://api.dropboxapi.com/oauth2/token",
+        auth=(app_key, app_secret),
+        data={"refresh_token": refresh_token, "grant_type": "refresh_token"}
+    )
+    new_token = resp.json().get("access_token")
+    return new_token
 
 # ================================================================
 # NOTIFICATIONS
