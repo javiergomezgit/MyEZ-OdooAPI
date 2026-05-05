@@ -61,14 +61,6 @@ async def shopify_customer_created(request: Request):
         }]
     )
 
-    # Fetch portal group ID dynamically
-    portal_groups = models.execute_kw(
-        ODOO_DB, uid, ODOO_PASSWORD,
-        "ir.model.data", "search_read",
-        [[["name", "=", "group_portal"]]],
-        {"fields": ["res_id"]},
-    )
-    portal_group_id = portal_groups[0]["res_id"] if portal_groups else 28
 
     # Create Odoo portal user
     models.execute_kw(
@@ -81,7 +73,7 @@ async def shopify_customer_created(request: Request):
             "partner_id": partner_id,
             "company_id": 25,
             "company_ids": [[6, 0, [25]]],
-            "sel_groups_1_10_11": portal_group_id,
+            "share": True,
         }]
     )
 
