@@ -46,7 +46,18 @@ async def shopify_customer_created(request: Request):
         raise HTTPException(status_code=400, detail="No email in Shopify payload")
 
     temp_password = generate_temp_password()
+
+    # Authenticate Odoo before duplicate check
     uid, models = odoo_authenticate()
+
+    # Check if user already exists in Odoo
+    existing = models.execute_kw(
+        ODOO_DB, uid, ODOO_PASSWORD,
+        "res.users", "search",
+        [[["login", "=", email]]]
+    )
+    if existing:
+        return {"status": "skipped", "reason": "user already exists", "email": email}
 
     # Create Odoo partner
     partner_id = models.execute_kw(
