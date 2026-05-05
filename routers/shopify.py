@@ -32,7 +32,7 @@ async def shopify_customer_created(request: Request):
 
     data = json.loads(body)
 
-    fifirst_name = data.get("first_name", "")
+    first_name = data.get("first_name", "")
     last_name = data.get("last_name", "")
     full_name = f"{first_name} {last_name}".strip()
     email = data.get("email", "")
