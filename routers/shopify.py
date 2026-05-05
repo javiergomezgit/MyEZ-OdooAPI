@@ -81,7 +81,7 @@ async def shopify_customer_created(request: Request):
             "partner_id": partner_id,
             "company_id": 25,
             "company_ids": [[6, 0, [25]]],
-            "groups_id": [[6, 0, [portal_group_id]]],
+            "sel_groups_1_10_11": portal_group_id,
         }]
     )
 
