@@ -106,8 +106,8 @@ async def shopify_customer_created(request: Request):
         }]
     )
     try:
-    models.execute_kw(ODOO_DB, uid, ODOO_PASSWORD, "mail.mail", "send", [[mail_id]])
-except Exception:
-    pass
+        models.execute_kw(ODOO_DB, uid, ODOO_PASSWORD, "mail.mail", "send", [[mail_id]])
+    except Exception:
+        pass
 
     return {"status": "ok", "partner_id": partner_id, "email": email}
