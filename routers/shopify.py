@@ -32,10 +32,14 @@ async def shopify_customer_created(request: Request):
 
     data = json.loads(body)
 
-    first_name = data.get("first_name", "")
+    fifirst_name = data.get("first_name", "")
     last_name = data.get("last_name", "")
     full_name = f"{first_name} {last_name}".strip()
     email = data.get("email", "")
+
+    # Fallback: if no name provided, derive from email
+    if not full_name:
+        full_name = email.split("@")[0] if email else "Unknown"
     phone = data.get("phone", "") or ""
     zip_code = ""
     address = data.get("default_address")
