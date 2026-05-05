@@ -73,7 +73,7 @@ async def shopify_customer_created(request: Request):
             "partner_id": partner_id,
             "company_id": 25,
             "company_ids": [[6, 0, [25]]],
-            "share": True,
+            "group_ids": [[6, 0, [10]]],
         }]
     )
 
