@@ -104,25 +104,25 @@ async def shopify_customer_created(request: Request):
     })
 
     # Send welcome email via Odoo
-    mail_id = models.execute_kw(
-        ODOO_DB, uid, ODOO_PASSWORD,
-        "mail.mail", "create", [{
-            "subject": "Welcome to EZ Inflatables",
-            "body_html": f"""
-                <p>Hi {first_name},</p>
-                <p>Your EZ Inflatables account has been created.</p>
-                <p><strong>Email:</strong> {email}<br/>
-                <strong>Temporary password:</strong> {temp_password}</p>
-                <p>Please log in and change your password as soon as possible.</p>
-                <p>EZ Inflatables Team</p>
-            """,
-            "email_to": email,
-            "auto_delete": True,
-        }]
-    )
-    try:
-        models.execute_kw(ODOO_DB, uid, ODOO_PASSWORD, "mail.mail", "send", [[mail_id]])
-    except Exception:
-        pass
+    # mail_id = models.execute_kw(
+    #     ODOO_DB, uid, ODOO_PASSWORD,
+    #     "mail.mail", "create", [{
+    #         "subject": "Welcome to EZ Inflatables",
+    #         "body_html": f"""
+    #             <p>Hi {first_name},</p>
+    #             <p>Your EZ Inflatables account has been created.</p>
+    #             <p><strong>Email:</strong> {email}<br/>
+    #             <strong>Temporary password:</strong> {temp_password}</p>
+    #             <p>Please log in and change your password as soon as possible.</p>
+    #             <p>EZ Inflatables Team</p>
+    #         """,
+    #         "email_to": email,
+    #         "auto_delete": True,
+    #     }]
+    # )
+    # try:
+    #     models.execute_kw(ODOO_DB, uid, ODOO_PASSWORD, "mail.mail", "send", [[mail_id]])
+    # except Exception:
+    #     pass
 
     return {"status": "ok", "partner_id": partner_id, "email": email}
