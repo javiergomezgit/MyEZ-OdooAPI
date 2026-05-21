@@ -28,6 +28,8 @@ async def shopify_customer_created(request: Request):
         raise HTTPException(status_code=401, detail="Invalid webhook signature")
 
     data = json.loads(body)
+    print("DEBUG accepts_marketing:", data.get("accepts_marketing"), type(data.get("accepts_marketing")))
+    print("DEBUG SHOPIFY PAYLOAD:", json.dumps(data, indent=2))
 
     first_name = data.get("first_name", "")
     last_name = data.get("last_name", "")
@@ -45,7 +47,12 @@ async def shopify_customer_created(request: Request):
         zip_code = address.get("zip", "") or ""
 
     subscribed = data.get("accepts_marketing", False)
-    created_at = data.get("created_at", "")
+    from datetime import datetime, timezone
+    created_at_str = data.get("created_at", "")
+    try:
+        created_at = datetime.fromisoformat(created_at_str).timestamp()
+    except Exception:
+        created_at = datetime.now(timezone.utc).timestamp()
 
     if not email:
         raise HTTPException(status_code=400, detail="No email in Shopify payload")
@@ -103,7 +110,7 @@ async def shopify_customer_created(request: Request):
         "company_name": "",
         "profile_image_url": "https://firebasestorage.googleapis.com/v0/b/myezfirebase.appspot.com/o/myez-default-profile-image.png?alt=media&token=220f60c3-4cb2-480f-a365-f7852b229857",
         "owned_weight": 0,
-        "units": {},
+        "units": {"placeholder": 0},
         "typeuser": "minimumweight",
         "fcmToken": "",
         "subscribed": subscribed,
