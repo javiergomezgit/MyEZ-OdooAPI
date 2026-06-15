@@ -163,6 +163,8 @@ def run_purchases(csv_path):
         for i, row in enumerate(reader, start=1):
             transaction_id = (row.get("transaction_id") or "").strip()
             sku            = (row.get("SKU") or "").strip()
+            if sku.upper().endswith("-TX"):
+                sku = sku[:-3]
             sold_str       = (row.get("Sold") or "").strip()
             total          = clean_total(row.get("Total") or "")
             weight         = clean_weight(row.get("Weight") or "")
