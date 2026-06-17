@@ -1,197 +1,284 @@
-# MyEZ Integration Layer — Odoo + FastAPI + iOS
+# MyEZ Integration Layer — Odoo + FastAPI + Firebase
 
-FastAPI backend serving as the integration layer between Odoo ERP, Firebase Realtime Database, and the MyEZ iOS client. Exposes clean REST endpoints consumed by the mobile app, manages FCM push notifications, triggers automatic rank-up alerts via Google Cloud Run, and delivers Dropbox product image links per SKU.
+FastAPI backend serving as the integration layer between Odoo ERP,
+Firebase Realtime Database, and the MyEZ iOS client. Exposes REST
+endpoints consumed by the mobile app, manages FCM push notifications,
+triggers rank-up alerts via Google Cloud Run, and delivers Dropbox
+product image links per SKU.
+
+**Owner:** Javier Gomez — sole engineer, architect, and product owner.
+
+---
 
 ## Live API
+
+```
 https://myez-odooapi-production.up.railway.app
+```
+
+---
+
+## Stack
+
+- **FastAPI** — REST API middleware layer
+- **Odoo 19 XML-RPC** — ERP data source (res.partner, account.move)
+- **Railway** — PaaS cloud deployment
+- **Firebase Realtime Database** — user data, FCM tokens, owned units, deals
+- **Firebase Auth** — end user authentication (email/password)
+- **FCM v1** — iOS push notifications via APNs
+- **Google Cloud Run** — bidirectional Odoo ↔ Firebase sync
+- **Dropbox API** — OAuth2 scoped app for product image folder links
+- **UIKit/iOS** — mobile client consuming this API
+
+---
 
 ## Architecture
+
 ```mermaid
 graph TD
-    subgraph iOS["📱 iOS Client (SwiftUI)"]
+    subgraph iOS["📱 iOS Client (UIKit)"]
         A[DealsView]
-        B[Pull to Refresh]
-        C[Loading / Error State]
+        B[MyEZView]
+        C[GamificationView]
         D[Login / Signup]
-        N2[DownloadUnitSheet]
+        E[DownloadUnitSheet]
     end
 
-    subgraph Railway["☁️ Railway (PaaS)"]
-        E[FastAPI Middleware]
-        F[GET /ping]
-        G[GET /odoo/ping]
-        H[GET /odoo/clients]
-        I[GET /odoo/clients/ranking]
-        J[GET /clients/owned-units/partner_id]
-        K[POST /notify]
-        L[POST /register-token]
-        M[POST /notify/user/partner_id]
-        P[GET /products]
-        Q[GET /products/product_id]
-        R2[GET /products/image/sku]
+    subgraph Railway["☁️ Railway (FastAPI)"]
+        F[GET /clients/owned-units]
+        G[GET /products/image/sku]
+        H[POST /notify/user/partner_id]
+        I[POST /notify/register-token]
+        J[POST /shopify/customer-created]
+        K[POST /gamification/check-rank-changes]
     end
 
-    subgraph Odoo["🗄️ Odoo ERP"]
-        N[res.partner]
-        O[x_studio_rank_weight]
-        PA[account.move]
-        QA[x_studio_owned_weight]
+    subgraph Odoo["🗄️ Odoo 19"]
+        L[res.partner]
+        M[account.move]
+        N[x_studio_rank_weight]
     end
 
     subgraph CloudRun["⚡ Google Cloud Run"]
-        R[odoo-sync service]
+        O[odoo-sync service]
     end
 
     subgraph Firebase["🔥 Firebase"]
-        S[Realtime Database]
-        T[users/partner_id/fcmTokens]
-        U[users/partner_id/typeuser]
-        V[users/partner_id/owned_weight]
-        W[users/partner_id/units]
-        X[FCM Push Notifications]
+        P[Realtime Database]
+        Q[users/firebaseUID/fcmTokens]
+        R[users/firebaseUID/typeuser]
+        S[users/firebaseUID/owned_weight]
+        T[FCM Push Notifications]
     end
 
     subgraph Dropbox["📦 Dropbox"]
-        DB1[MainImages folder]
-        DB2[SKU/SKU-PNG subfolders]
+        U[MainImages folder]
+        V[SKU/SKU-PNG subfolders]
     end
 
-    D -->|login success| L
-    A -->|REST HTTP GET| E
-    B --> A
-    C --> A
-    N2 -->|GET /products/image/sku| R2
-    E -->|XML-RPC| N
-    E -->|XML-RPC| O
-    E --> S
-    L --> T
-    M --> X
-    J --> S
-    R2 -->|OAuth2| DB1
-    DB1 --> DB2
-    Odoo -->|server action| R
-    R -->|writes| S
-    R -->|writes rank back| N
-    R -->|rank changed| M
-    X -->|APNs| iOS
-
-    subgraph Config["🔐 Config"]
-        Y[.env — credentials]
-        Z[Railway env vars]
-    end
-
-    Y --> E
-    Z --> E
+    D --> I
+    B --> F
+    E --> G
+    F --> P
+    G --> U
+    U --> V
+    Railway -->|XML-RPC| L
+    Railway -->|XML-RPC| M
+    Odoo --> O
+    O -->|writes| P
+    O -->|writes rank back| L
+    O -->|rank changed| H
+    H --> T
+    T -->|APNs| iOS
 ```
+
+---
 
 ## Endpoints
 
 | Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/ping` | Health check — confirms API is live |
-| GET | `/odoo/ping` | Odoo auth check — confirms XML-RPC connection |
-| GET | `/odoo/clients` | Returns live client list from Odoo |
-| GET | `/odoo/clients/ranking` | Returns clients ranked by inflatable weight owned. Null values handled as "No Rank Yet", ranked clients sorted first. |
-| GET | `/clients/owned-units/{partner_id}` | Returns owned inflatable units, total weight, and rank tier for a specific customer from Firebase. |
-| GET | `/products` | Returns published products from Odoo shop |
-| GET | `/products/{product_id}` | Returns single product detail from Odoo |
-| GET | `/products/image/{sku}` | Returns Dropbox shared folder URL for a SKU's image folder (`/MainImages (1)/{sku}/{sku}-PNG`). Auto-refreshes Dropbox OAuth2 token if expired. |
-| POST | `/notify` | Sends push notification to a specific device via FCM token. Params: `token`, `title`, `body` |
-| POST | `/register-token` | Registers a device FCM token in Firebase Realtime Database. Supports multiple devices per user. Params: `partner_id`, `token` |
-| POST | `/notify/user/{partner_id}` | Sends push notification to all registered devices for an Odoo partner. Params: `title`, `body` |
-| POST | `/odoo/check-rank-changes` | Manual bulk rank check across all partners |
+|---|---|---|
+| GET | `/ping` | Health check |
+| GET | `/odoo/ping` | Odoo XML-RPC connection check |
+| GET | `/clients/odoo` | Client list from Odoo |
+| GET | `/clients/odoo/ranking` | Clients ranked by owned weight |
+| GET | `/clients/owned-units/{partner_id}` | Owned units + weight + rank from Firebase |
+| GET | `/products` | Published products from Odoo |
+| GET | `/products/{product_id}` | Single product detail |
+| GET | `/products/image/{sku}` | Dropbox shared folder URL for SKU |
+| POST | `/shopify/customer-created` | Shopify webhook — new customer registration |
+| POST | `/notify` | Push to specific FCM token |
+| POST | `/notify/register-token` | Register device FCM token in Firebase |
+| POST | `/notify/user/{partner_id}` | Push to all devices for a partner |
+| POST | `/gamification/check-rank-changes` | Manual bulk rank check |
 
-## Dropbox Integration
-
-Product images are stored in a team Dropbox account under `/MainImages (1)/{SKU}/{SKU}-PNG/`.
-
-The `/products/image/{sku}` endpoint:
-1. Authenticates via OAuth2 using a scoped Dropbox app (`Full Dropbox` access)
-2. Auto-refreshes the access token using `DROPBOX_REFRESH_TOKEN` when expired
-3. Creates or retrieves a shared folder link for `{SKU}-PNG`
-4. Returns the public URL — iOS client appends `dl=1` for direct download or uses `dl=0` to open in browser
-
-## Rank Tiers
-
-| Rank | Weight Threshold |
-|------|-----------------|
-| Minimumweight | < 2,500 lb |
-| Flyweight | < 5,000 lb |
-| Bantamweight | < 7,500 lb |
-| Featherweight | < 10,000 lb |
-| Lightweight | < 12,500 lb |
-| Welterweight | < 15,000 lb |
-| Middleweight | < 17,500 lb |
-| Cruiserweight | < 20,000 lb |
-| Heavyweight | 20,001 lb+ |
+---
 
 ## Firebase Structure
 
 ```
 users/
-  {partner_id}/
-    name
-    email
-    owned_weight
-    typeuser        ← rank tier name
-    fcmTokens       ← array of FCM tokens
-    units/          ← SKU: quantity dict
-    last_sync
+  {firebaseUID}/                    ← Firebase UID is the primary key
+    uid: string                     — Firebase UID
+    partner_id: int                 — res.partner ID from Odoo
+    name: string
+    email: string
+    phone: string
+    zipCode: string
+    company_name: string
+    profile_image_url: string
+    owned_weight: int               — cumulative lbs owned
+    typeuser: string                — rank tier name
+    activeAt: int                   — Unix timestamp
+    createdAt: string
+    createdIn: string               — "shopify" | "my_ez" | "web_shop" | "sm_manual"
+    subscribed: bool
+    fcmTokens/
+      {deviceKey}: string           — one entry per device (multi-device support)
+    units/
+      {SKU}/
+        qty: int
+        product_id: int
+
+dealsLinks/
+  {timestamp}/
+    name, sort, imageURL, emoji, actionType, actionValue, expiresAt
+
 rank_cache/
-  {partner_id}: rank_name
+  {partner_id}: string             — rank tier name
 ```
 
-## Stack
+---
 
-- **FastAPI** — REST API middleware layer
-- **Odoo XML-RPC** — ERP data source (res.partner, account.move)
-- **Railway** — PaaS cloud deployment
-- **Firebase Realtime Database** — FCM token storage, user data, owned units
-- **Firebase Cloud Messaging** — iOS push notifications via FCM v1 API
-- **Google Cloud Run** — bidirectional sync between Odoo and Firebase
-- **Dropbox API** — OAuth2 scoped app for product image folder links
-- **SwiftUI/iOS** — mobile client consuming this API
+## Rank Tiers
+
+| Rank | Owned Weight | Discount |
+|---|---|---|
+| Minimumweight | 0 lb | 0% |
+| Flyweight | 1,000 lb | 2% |
+| Bantamweight | 2,000 lb | 3% |
+| Featherweight | 4,000 lb | 4% |
+| Lightweight | 6,000 lb | 5% |
+| Middleweight | 9,000 lb | 6% |
+| Heavyweight | 13,000+ lb | 7% |
+
+- Rank is permanent — based on cumulative owned weight, never resets
+- `typeuser` in Firebase stores the current rank name
+- Tier promotion triggers push via `/notify/user/{partner_id}`
+- Defined in `core/config.py` as `RANK_TIERS`
+
+---
+
+## Dropbox Integration
+
+Images stored under `/MainImages (1)/{SKU}/{SKU}-PNG/` in team Dropbox.
+
+`GET /products/image/{sku}`:
+1. Authenticates via OAuth2 scoped Dropbox app
+2. Auto-refreshes access token using `DROPBOX_REFRESH_TOKEN` when expired
+3. Returns shared folder URL for `{SKU}-PNG`
+4. iOS appends `dl=1` for direct download or `dl=0` to open in browser
+
+---
 
 ## System Flow
 
-1. Odoo invoice confirmed → server action triggers Google Cloud Run
-2. Cloud Run calculates rank from owned weight → writes to Firebase + back to Odoo
-3. If rank changed → Cloud Run calls FastAPI `/notify/user/{partner_id}` automatically
-4. iOS app login → FCM token registered via `/register-token` → stored in Firebase
-5. FastAPI delivers push notification to all user devices via FCM v1 API
-6. iOS requests product image → FastAPI calls Dropbox API → returns shared folder URL
+```
+iOS login → POST /notify/register-token → fcmTokens/{deviceKey} in Firebase
 
-## Environment Variables (Railway)
+Shopify customer/create event
+  → POST /shopify/customer-created
+  → create res.partner + res.users in Odoo
+  → write Firebase entry (createdIn: "shopify")
+
+Odoo invoice confirmed (Phase 2)
+  → Cloud Run odoo-sync
+  → writes owned_weight + units to Firebase
+  → writes rank back to res.partner
+  → rank changed → POST /notify/user/{partner_id}
+  → FCM v1 → APNs → iPhone
+```
+
+---
+
+## Project Structure
+
+```
+myez-odoo-api/
+├── main.py                   — mounts routers, health checks
+├── core/
+│   ├── config.py             — env vars, RANK_TIERS
+│   └── helpers.py            — Odoo, Firebase, FCM, Dropbox utils
+└── routers/
+    ├── shopify.py            — POST /shopify/customer-created
+    ├── clients.py            — GET /clients/*
+    ├── products.py           — GET /products, /image/{sku}
+    ├── notifications.py      — POST /notify, /register-token
+    └── gamification.py       — POST /gamification/check-rank-changes
+```
+
+---
+
+## Odoo Configuration
+
+- **URL:** https://ezinflatables.odoo.com
+- **DB:** devops-ghost-test-ezinflatables-main-14244209
+- **Company ID:** 25 / **Portal Group ID:** 10
+- **Portal user creation:** `"group_ids": [[6, 0, [10]]]` — Odoo 19 only
+- Do NOT use: `groups_id`, `sel_groups_*`, `share: True` — broken in Odoo 19
+- `mail.mail` send returns `None` — always wrap in try/except
+
+---
+
+## Environment Variables
 
 | Variable | Purpose |
-|----------|---------|
+|---|---|
 | `ODOO_URL` | Odoo instance URL |
 | `ODOO_DB` | Odoo database name |
 | `ODOO_USER` | Odoo admin user |
 | `ODOO_PASSWORD` | Odoo admin password |
-| `FIREBASE_SERVICE_ACCOUNT` | Base64-encoded Firebase service account JSON |
-| `DROPBOX_TOKEN` | Dropbox OAuth2 access token (auto-refreshed) |
-| `DROPBOX_REFRESH_TOKEN` | Dropbox OAuth2 refresh token |
-| `DROPBOX_APP_KEY` | Dropbox app key |
+| `FIREBASE_SERVICE_ACCOUNT` | Base64-encoded service account JSON |
+| `DROPBOX_TOKEN` | OAuth2 access token (auto-refreshed) |
+| `DROPBOX_REFRESH_TOKEN` | OAuth2 refresh token |
+| `DROPBOX_APP_KEY` | z0wqyom5n6h3nbv |
 | `DROPBOX_APP_SECRET` | Dropbox app secret |
+| `SHOPIFY_WEBHOOK_SECRET` | HMAC-SHA256 webhook verification |
 | `CACHE_BUST` | Increment to force Railway rebuild |
+
+---
 
 ## Security
 
-- Credentials stored in `.env` — never committed
-- Railway environment variables used in production
-- Firebase service account authenticated via OAuth2
-- Dropbox access token auto-refreshed server-side — never exposed to iOS client
-- `.gitignore` configured to exclude all secrets
+- All credentials in `.env` — never committed
+- Railway env vars used in production
+- Dropbox token auto-refreshed server-side — never exposed to iOS
+- Shopify webhook verified via HMAC-SHA256 signature
+- `.gitignore` excludes all secrets
+
+---
 
 ## Local Setup
+
 ```bash
 git clone https://github.com/javiergomezgit/myez-odoo-api
 cd myez-odoo-api
-cp .env.example .env  # add your credentials
+cp .env.example .env  # add credentials
 pip install -r requirements.txt
 uvicorn main:app --reload
 ```
 
+---
+
+## Related Repos
+
+| Repo | Description |
+|---|---|
+| github.com/javiergomezgit/MyEZ-App | iOS client |
+| github.com/javiergomezgit/ezclock-api | EZClock internal app |
+
+---
+
 ## Author
+
 Javier Gomez — Senior Software Engineer
