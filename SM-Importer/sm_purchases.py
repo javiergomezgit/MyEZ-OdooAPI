@@ -4,14 +4,13 @@ Sales Master Purchases Import Script — Phase 1
 Reads an ordered items CSV from Sales Master and:
 1. Matches customer by email to Firebase Auth
 2. Skips if transaction_id already exists in Firebase
-3. Skips weight > 0 and <= 90 (accessories with small weight, no inflatable)
-4. Red flags weight == 0 and total > 1000 (data entry error)
-5. Writes raw transaction to users/{uid}/transactions/{transaction_id}/
-6. Updates users/{uid}/units/{SKU}: qty (weight > 90 only)
-7. Updates users/{uid}/owned_weight (weight > 90 only)
-8. Calculates and stores score per transaction:
-   - weight > 90: int(total * 0.25)
-   - weight == 0 or <= 90: total (full price as score)
+3. Red flags weight == 0 and total > 1000 (data entry error)
+4. Writes raw transaction to users/{uid}/transactions/{transaction_id}/
+5. Updates users/{uid}/units/{SKU}: qty (weight >= 54 only)
+6. Updates users/{uid}/owned_weight (weight >= 54 only)
+7. Calculates and stores score per transaction:
+   - weight >= 54 (inflatable): int(weight * 0.25)
+   - weight < 54 (accessory/money): int(total * 0.50)
 
 Does NOT update: typeuser, leaderboard, FCM — handled by update_ranks.py
 
@@ -58,6 +57,12 @@ def init_firebase():
 
 
 # ----------------------------------------------------------------
+# WEIGHT THRESHOLD
+# ----------------------------------------------------------------
+INFLATABLE_WEIGHT_THRESHOLD = 54  # lbs — items at or above this are inflatables
+
+
+# ----------------------------------------------------------------
 # HELPERS
 # ----------------------------------------------------------------
 
@@ -96,6 +101,11 @@ def parse_date_to_unix(date_str):
         return int(datetime.now(timezone.utc).timestamp())
 
 
+def is_inflatable(weight):
+    """Returns True if weight qualifies as an inflatable."""
+    return weight >= INFLATABLE_WEIGHT_THRESHOLD
+
+
 def get_uid_by_email(email):
     try:
         user = auth.get_user_by_email(email)
@@ -127,10 +137,10 @@ def transaction_exists(uid, transaction_id):
 def calculate_score(weight, total):
     """
     Calculate score for a single transaction.
-    - weight > 90 (inflatable): int(weight * 0.25)
-    - weight <= 90 (accessory/money): int(total * 0.50)
+    - weight >= 54 (inflatable): int(weight * 0.25)
+    - weight < 54 (accessory/money): int(total * 0.50)
     """
-    if weight > 90:
+    if is_inflatable(weight):
         return int(weight * 0.25)
     else:
         return int(total * 0.50)
@@ -143,15 +153,7 @@ def calculate_score(weight, total):
 def run_purchases(csv_path):
     print(f"📂 Reading: {csv_path}\n")
 
-    # Accumulate per user across rows
     user_updates = {}
-    # user_updates[uid] = {
-    #   email,
-    #   skus_with_weight: {sku: qty},
-    #   weight_add: int,
-    #   transactions: {transaction_id: {...}}
-    # }
-
     skipped = []
     red_flags = []
     processed_rows = 0
@@ -165,42 +167,36 @@ def run_purchases(csv_path):
             sku            = (row.get("SKU") or "").strip()
             if sku.upper().endswith("-TX"):
                 sku = sku[:-3]
-            sold_str       = (row.get("Sold") or "").strip()
-            total          = clean_total(row.get("Total") or "")
-            weight         = clean_weight(row.get("Weight") or "")
-            email          = clean_email(row.get("Email") or "")
-            created_on     = (row.get("Created On") or "").strip()
+            sold_str   = (row.get("Sold") or "").strip()
+            total      = clean_total(row.get("Total") or "")
+            weight     = clean_weight(row.get("Weight") or "")
+            email      = clean_email(row.get("Email") or "")
+            created_on = (row.get("Created On") or "").strip()
 
             print(f"[{i}] txn={transaction_id} | SKU={sku} | weight={weight} | total={total} | {email}")
 
             # Skip no email
             if not email:
                 print(f"  ⚠ No email — skipping")
-                skipped.append({"row": i, "reason": "no email"})
+                skipped.append({"row": i, "txn": transaction_id, "reason": "no email"})
                 continue
 
             # Skip no SKU
             if not sku:
                 print(f"  ⚠ No SKU — skipping")
-                skipped.append({"row": i, "email": email, "reason": "no SKU"})
+                skipped.append({"row": i, "txn": transaction_id, "email": email, "reason": "no SKU"})
                 continue
 
             # Skip no transaction_id
             if not transaction_id:
                 print(f"  ⚠ No transaction_id — skipping")
-                skipped.append({"row": i, "email": email, "reason": "no transaction_id"})
+                skipped.append({"row": i, "txn": transaction_id, "email": email, "reason": "no transaction_id"})
                 continue
 
             # Red flag: weight == 0 and total > 1000
             if weight == 0 and total > 1000:
                 print(f"  🚩 RED FLAG: weight=0 but total=${total} > 1000 — data entry error, skipping")
                 red_flags.append({"row": i, "txn": transaction_id, "sku": sku, "email": email, "total": total})
-                continue
-
-            # Skip weight > 0 and <= 90
-            if 0 < weight <= 90:
-                print(f"  ⚠ Weight {weight} <= 90 — skipping")
-                skipped.append({"row": i, "sku": sku, "email": email, "reason": f"weight {weight} <= 90"})
                 continue
 
             # Parse sold quantity
@@ -213,20 +209,19 @@ def run_purchases(csv_path):
             uid = get_uid_by_email(email)
             if not uid:
                 print(f"  ⚠ User not found in Firebase Auth — skipping")
-                skipped.append({"row": i, "sku": sku, "email": email, "reason": "user not in Firebase"})
+                skipped.append({"row": i, "txn": transaction_id, "sku": sku, "email": email, "reason": "user not in Firebase"})
                 continue
 
             # Check if transaction already processed
             if transaction_exists(uid, transaction_id):
                 print(f"  → Transaction {transaction_id} already recorded — skipping")
-                skipped.append({"row": i, "sku": sku, "email": email, "reason": f"transaction {transaction_id} already exists"})
+                skipped.append({"row": i, "txn": transaction_id, "sku": sku, "email": email, "reason": f"transaction {transaction_id} already exists"})
                 continue
 
-            # Calculate score
-            score = calculate_score(weight, total)
-
-            # Calculate weight add
-            weight_add = int(weight * sold) if weight > 90 else 0
+            # Calculate score and weight
+            score      = calculate_score(weight, total)
+            weight_add = int(weight * sold) if is_inflatable(weight) else 0
+            type_score = "weight" if is_inflatable(weight) else "money"
 
             # Initialize user accumulator
             if uid not in user_updates:
@@ -237,8 +232,8 @@ def run_purchases(csv_path):
                     "transactions": {},
                 }
 
-            # Accumulate SKU qty (weight > 90 only)
-            if weight > 90:
+            # Accumulate SKU qty (inflatables only)
+            if is_inflatable(weight):
                 if sku in user_updates[uid]["skus_with_weight"]:
                     user_updates[uid]["skus_with_weight"][sku] += sold
                 else:
@@ -254,11 +249,11 @@ def run_purchases(csv_path):
                 "weight": int(weight),
                 "total": total,
                 "score": score,
-                "type_score": "weight" if weight > 90 else "money",
+                "type_score": type_score,
                 "createdOn": parse_date_to_unix(created_on),
             }
 
-            print(f"  → Queued: weight_add={weight_add}, score={score}")
+            print(f"  → Queued: weight_add={weight_add}, score={score}, type={type_score}")
             processed_rows += 1
 
     # ----------------------------------------------------------------
@@ -298,7 +293,6 @@ def run_purchases(csv_path):
                     current_units[sku] = qty
 
         try:
-            # Update owned_weight and units
             ref = db.reference(f"users/{uid}")
             ref.update({
                 "owned_weight": new_weight,
@@ -306,7 +300,6 @@ def run_purchases(csv_path):
                 "activeAt": int(datetime.now(timezone.utc).timestamp()),
             })
 
-            # Write transactions
             txn_ref = db.reference(f"users/{uid}/transactions")
             txn_ref.update(updates["transactions"])
 
@@ -340,7 +333,7 @@ def run_purchases(csv_path):
     if skipped:
         print("\nSkipped:")
         for s in skipped:
-            print(f"  Row {s.get('row')} | {s.get('sku','')} | {s.get('email','')} → {s.get('reason','')}")
+            print(f"  Row {s.get('row')} | txn={s.get('txn','')} | {s.get('sku','')} | {s.get('email','')} → {s.get('reason','')}")
 
     if errors:
         print("\nErrors:")
