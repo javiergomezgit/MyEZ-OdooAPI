@@ -241,7 +241,7 @@ myez-odoo-api/
 | `FIREBASE_SERVICE_ACCOUNT` | Base64-encoded service account JSON |
 | `DROPBOX_TOKEN` | OAuth2 access token (auto-refreshed) |
 | `DROPBOX_REFRESH_TOKEN` | OAuth2 refresh token |
-| `DROPBOX_APP_KEY` | z0wqyom5n6h3nbv |
+| `DROPBOX_APP_KEY` | ....h3nbv |
 | `DROPBOX_APP_SECRET` | Dropbox app secret |
 | `SHOPIFY_WEBHOOK_SECRET` | HMAC-SHA256 webhook verification |
 | `CACHE_BUST` | Increment to force Railway rebuild |

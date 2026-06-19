@@ -1,0 +1,968 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>MyEZ Admin — Deals</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0f0f0f; color: #f0f0f0; min-height: 100vh; }
+
+    #auth-screen { display: flex; align-items: center; justify-content: center; min-height: 100vh; }
+    .auth-card { background: #1c1c1e; border: 1px solid #2c2c2e; border-radius: 16px; padding: 40px; width: 100%; max-width: 400px; }
+    .auth-card h1 { font-size: 22px; font-weight: 700; margin-bottom: 8px; }
+    .auth-card p { color: #8e8e93; font-size: 14px; margin-bottom: 28px; }
+
+    #main-screen { display: none; }
+    .topbar { background: #1c1c1e; border-bottom: 1px solid #2c2c2e; padding: 16px 24px; display: flex; align-items: center; justify-content: space-between; }
+    .topbar h1 { font-size: 18px; font-weight: 700; }
+    .container { max-width: 900px; margin: 0 auto; padding: 24px; }
+
+    .form-card { background: #1c1c1e; border: 1px solid #2c2c2e; border-radius: 16px; padding: 28px; margin-bottom: 32px; }
+    .form-card h2 { font-size: 16px; font-weight: 600; margin-bottom: 20px; color: #fff; }
+    .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    .form-row-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; }
+    .form-group { display: flex; flex-direction: column; gap: 6px; margin-bottom: 16px; }
+    .form-group label { font-size: 12px; font-weight: 600; color: #8e8e93; text-transform: uppercase; letter-spacing: 0.8px; }
+    input[type="text"], input[type="email"], input[type="password"], input[type="number"],
+    input[type="url"], input[type="datetime-local"], select, textarea {
+      background: #2c2c2e; border: 1px solid #3a3a3c; border-radius: 10px;
+      color: #f0f0f0; padding: 12px 14px; font-size: 15px; width: 100%;
+      outline: none; transition: border 0.2s;
+    }
+    input:focus, select:focus, textarea:focus { border-color: #e8272b; }
+
+    .page-tabs { display: flex; gap: 0; border-bottom: 1px solid #2c2c2e; margin-bottom: 28px; }
+    .page-tab { padding: 12px 28px; border: none; background: transparent; color: #8e8e93; font-size: 15px; font-weight: 600; cursor: pointer; transition: all 0.2s; border-bottom: 2px solid transparent; margin-bottom: -1px; }
+    .page-tab.active { color: #fff; border-bottom-color: #e8272b; }
+    .page-tab:hover:not(.active) { color: #ccc; }
+    .tab-panel { display: none; }
+    .tab-panel.active { display: block; }
+
+    .image-tabs { display: flex; gap: 8px; margin-bottom: 12px; }
+    .img-tab { padding: 7px 16px; border-radius: 8px; border: 1px solid #3a3a3c; background: transparent; color: #8e8e93; font-size: 13px; cursor: pointer; transition: all 0.2s; }
+    .img-tab.active { background: #e8272b; border-color: #e8272b; color: #fff; }
+    .image-preview-wrap { margin-top: 10px; background: #2c2c2e; border-radius: 10px; border: 1px dashed #3a3a3c; overflow: hidden; position: relative; min-height: 120px; display: flex; align-items: center; justify-content: center; }
+    .image-preview-wrap .empty-label { color: #8e8e93; font-size: 13px; }
+    .image-preview-wrap img.preview-img { width: 100%; display: block; object-fit: cover; }
+    .crop-label { position: absolute; bottom: 8px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,0.7); color: #fff; font-size: 11px; font-weight: 600; padding: 3px 10px; border-radius: 20px; white-space: nowrap; pointer-events: none; }
+    #file-drop { border: 2px dashed #3a3a3c; border-radius: 10px; padding: 28px; text-align: center; color: #8e8e93; font-size: 14px; cursor: pointer; transition: border 0.2s; }
+    #file-drop:hover, #file-drop.drag-over { border-color: #e8272b; color: #e8272b; }
+    #file-input { display: none; }
+
+    .emoji-grid { display: flex; flex-wrap: wrap; gap: 8px; background: #2c2c2e; border: 1px solid #3a3a3c; border-radius: 10px; padding: 12px; max-height: 160px; overflow-y: auto; }
+    .emoji-btn { font-size: 22px; padding: 6px; border-radius: 8px; cursor: pointer; border: 2px solid transparent; transition: all 0.15s; background: transparent; }
+    .emoji-btn:hover { background: #3a3a3c; }
+    .emoji-btn.selected { border-color: #e8272b; background: rgba(232,39,43,0.15); }
+    .emoji-selected-display { font-size: 32px; text-align: center; padding: 8px; }
+
+    .actions-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 16px; }
+    .action-option { background: #2c2c2e; border: 1px solid #3a3a3c; border-radius: 10px; padding: 14px 10px; cursor: pointer; transition: all 0.2s; text-align: center; }
+    .action-option:hover { border-color: #555; }
+    .action-option.selected { border-color: #e8272b; background: rgba(232,39,43,0.1); }
+    .action-option .action-icon { font-size: 22px; margin-bottom: 6px; }
+    .action-option .action-label { font-size: 12px; font-weight: 600; color: #8e8e93; }
+    .action-option.selected .action-label { color: #e8272b; }
+    .action-detail { background: #2c2c2e; border: 1px solid #3a3a3c; border-radius: 10px; padding: 16px; margin-top: 4px; }
+    .action-detail label { font-size: 12px; font-weight: 600; color: #8e8e93; text-transform: uppercase; letter-spacing: 0.8px; display: block; margin-bottom: 6px; }
+
+    .btn { padding: 13px 24px; border-radius: 10px; border: none; font-size: 15px; font-weight: 600; cursor: pointer; transition: all 0.2s; }
+    .btn-primary { background: #e8272b; color: #fff; width: 100%; }
+    .btn-primary:hover { background: #c0191d; }
+    .btn-primary:disabled { background: #555; cursor: not-allowed; }
+    .btn-ghost { background: transparent; border: 1px solid #3a3a3c; color: #8e8e93; }
+    .btn-ghost:hover { border-color: #e8272b; color: #e8272b; }
+    .btn-danger { background: transparent; border: 1px solid #3a3a3c; color: #ff453a; font-size: 13px; padding: 6px 12px; border-radius: 8px; cursor: pointer; }
+    .btn-danger:hover { background: rgba(255,69,58,0.1); }
+    .btn-logout { background: transparent; border: 1px solid #3a3a3c; color: #8e8e93; font-size: 13px; padding: 8px 16px; border-radius: 8px; cursor: pointer; }
+    .btn-logout:hover { border-color: #ff453a; color: #ff453a; }
+
+    .deals-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+    .deals-header h2 { font-size: 16px; font-weight: 600; }
+    .deal-card { background: #1c1c1e; border: 1px solid #2c2c2e; border-radius: 12px; padding: 16px; margin-bottom: 12px; display: flex; align-items: center; gap: 16px; }
+    .deal-card.expired { opacity: 0.5; border-color: rgba(255,69,58,0.2); }
+    .deal-thumb { width: 105px; height: 30px; border-radius: 4px; object-fit: cover; background: #2c2c2e; flex-shrink: 0; }
+    .deal-thumb-placeholder { width: 105px; height: 30px; border-radius: 4px; background: #2c2c2e; display: flex; align-items: center; justify-content: center; color: #555; font-size: 16px; flex-shrink: 0; }
+    .deal-info { flex: 1; }
+    .deal-info h3 { font-size: 15px; font-weight: 600; margin-bottom: 4px; }
+    .deal-info p { font-size: 13px; color: #8e8e93; margin-bottom: 2px; }
+    .deal-badge { display: inline-block; padding: 3px 10px; border-radius: 20px; font-size: 11px; font-weight: 600; background: rgba(232,39,43,0.15); color: #e8272b; margin-top: 4px; margin-right: 4px; }
+    .deal-badge.expired-badge { background: rgba(255,69,58,0.15); color: #ff453a; }
+    .deal-badge.active-badge { background: rgba(48,209,88,0.15); color: #30d158; }
+    .deal-badge.prize-badge { background: rgba(255,214,10,0.15); color: #ffd60a; }
+    .deal-actions { display: flex; gap: 8px; align-items: center; flex-shrink: 0; }
+    .sort-badge { background: #2c2c2e; border-radius: 6px; padding: 4px 10px; font-size: 12px; color: #8e8e93; }
+
+    .limit-banner { background: rgba(255,159,10,0.1); border: 1px solid rgba(255,159,10,0.3); border-radius: 10px; padding: 12px 16px; margin-bottom: 16px; font-size: 13px; color: #ff9f0a; display: none; }
+    .section-label { font-size: 13px; font-weight: 700; color: #8e8e93; text-transform: uppercase; letter-spacing: 1px; margin: 24px 0 10px; }
+
+    .toast { position: fixed; bottom: 24px; right: 24px; background: #1c1c1e; border: 1px solid #2c2c2e; border-radius: 12px; padding: 14px 20px; font-size: 14px; display: none; z-index: 999; box-shadow: 0 8px 32px rgba(0,0,0,0.4); }
+    .toast.success { border-color: #30d158; color: #30d158; }
+    .toast.error { border-color: #ff453a; color: #ff453a; }
+    .toast.warning { border-color: #ff9f0a; color: #ff9f0a; }
+
+    .divider { border: none; border-top: 1px solid #2c2c2e; margin: 20px 0; }
+    .empty-state { text-align: center; padding: 48px; color: #8e8e93; font-size: 14px; }
+    .loading { text-align: center; padding: 24px; color: #8e8e93; }
+    .error-msg { color: #ff453a; font-size: 13px; margin-top: 6px; }
+    .hint { font-size: 12px; color: #555; margin-top: 4px; }
+  </style>
+</head>
+<body>
+
+<div id="auth-screen">
+  <div class="auth-card">
+    <h1>MyEZ Admin</h1>
+    <p>Sign in to manage deals</p>
+    <div class="form-group">
+      <label>Email</label>
+      <input type="email" id="login-email" placeholder="admin@ezinflatables.com" />
+    </div>
+    <div class="form-group">
+      <label>Password</label>
+      <input type="password" id="login-password" placeholder="••••••••" />
+    </div>
+    <div class="error-msg" id="login-error"></div>
+    <br/>
+    <button class="btn btn-primary" id="login-btn">Sign In</button>
+  </div>
+</div>
+
+<div id="main-screen">
+  <div class="topbar">
+    <h1>MyEZ Deals Admin</h1>
+    <div style="display:flex;align-items:center;gap:12px;">
+      <span id="user-email" style="color:#8e8e93;font-size:13px;"></span>
+      <button class="btn-logout" id="logout-btn">Sign Out</button>
+    </div>
+  </div>
+
+  <div class="container">
+    <!-- PAGE-LEVEL TABS -->
+    <div class="page-tabs">
+      <button class="page-tab active" id="tab-deal" onclick="switchCategory('deal')">🏷️ Top Deal</button>
+      <button class="page-tab" id="tab-prize" onclick="switchCategory('prize')">🏆 Monthly Prize</button>
+      <button class="page-tab" id="tab-points" onclick="switchCategory('points')">⭐ Points</button>
+    </div>
+
+    <div class="limit-banner" id="limit-banner">⚠️ Maximum of 5 active deals reached. Delete or expire an existing deal before adding a new one.</div>
+
+    <div class="form-card">
+      <h2 id="form-title">➕ Add New Deal</h2>
+
+      <!-- DEAL FIELDS -->
+      <div id="deal-fields">
+        <div class="form-row-3">
+          <div class="form-group">
+            <label>Deal Name</label>
+            <input type="text" id="deal-name" placeholder="Summer Water Slide Sale" />
+          </div>
+          <div class="form-group">
+            <label>Subtitle</label>
+            <input type="text" id="deal-subtitle" placeholder="Limited time offer" />
+          </div>
+          <div class="form-group">
+            <label>Sort Order (1–5)</label>
+            <input type="number" id="deal-sort" placeholder="1" min="1" max="5" />
+          </div>
+          <div class="form-group">
+            <label>Expiration Date &amp; Time</label>
+            <input type="datetime-local" id="deal-expiry" />
+            <span class="hint">Leave empty = no expiration</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- PRIZE FIELDS -->
+      <div id="prize-fields" style="display:none;">
+        <div class="form-row">
+          <div class="form-group">
+            <label>Prize Name</label>
+            <input type="text" id="prize-name" placeholder="Monthly Water Slide Giveaway" />
+          </div>
+          <div class="form-group">
+            <label>Expiration Date &amp; Time</label>
+            <input type="datetime-local" id="prize-expiry" />
+            <span class="hint">Leave empty = no expiration</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- POINTS FIELDS -->
+      <div id="points-fields" style="display:none;">
+        <div class="form-row-3">
+          <div class="form-group">
+            <label>Activity Name</label>
+            <input type="text" id="points-name" placeholder="Read Our Latest Blog" />
+          </div>
+          <div class="form-group">
+            <label>Subtitle</label>
+            <input type="text" id="points-subtitle" placeholder="Earn points for reading" />
+          </div>
+          <div class="form-group">
+            <label>Sort Order (1–5)</label>
+            <input type="number" id="points-sort" placeholder="1" min="1" max="5" />
+          </div>
+          <div class="form-group">
+            <label>Expiration Date &amp; Time</label>
+            <input type="datetime-local" id="points-expiry" />
+            <span class="hint">Leave empty = no expiration</span>
+          </div>
+          <div class="form-group">
+            <label>Points Value</label>
+            <input type="number" id="points-value" placeholder="50" min="1" step="1" />
+            <span class="hint">Points earned for this action</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- IMAGE (shared) -->
+      <div class="form-group">
+        <label>Image <span style="color:#555;font-weight:400;text-transform:none;letter-spacing:0;">(crop preview shown below)</span></label>
+        <div class="image-tabs">
+          <button class="img-tab active" onclick="switchImageTab('url')">Paste URL</button>
+          <button class="img-tab" onclick="switchImageTab('upload')">Upload File</button>
+        </div>
+        <div id="image-url-section">
+          <input type="url" id="deal-image-url" placeholder="https://..." oninput="previewFromURL()" />
+        </div>
+        <div id="image-upload-section" style="display:none;">
+          <div id="file-drop" onclick="document.getElementById('file-input').click()">📁 Click or drag &amp; drop an image here</div>
+          <input type="file" id="file-input" accept="image/*" onchange="handleFileSelect(event)" />
+        </div>
+        <div class="image-preview-wrap" id="image-preview">
+          <span class="empty-label">No image selected — crop preview will appear here</span>
+        </div>
+      </div>
+
+      <!-- DEAL-ONLY: ACTION -->
+      <div id="deal-only-fields">
+        <hr class="divider"/>
+
+        <div class="form-group">
+          <label>Action Type</label>
+          <div class="actions-grid">
+            <div class="action-option" data-action="add_to_cart" onclick="selectAction('add_to_cart')">
+              <div class="action-icon">🛒</div><div class="action-label">Add to Cart</div>
+            </div>
+            <div class="action-option" data-action="text_now" onclick="selectAction('text_now')">
+              <div class="action-icon">💬</div><div class="action-label">Text Now</div>
+            </div>
+            <div class="action-option" data-action="call_now" onclick="selectAction('call_now')">
+              <div class="action-icon">📞</div><div class="action-label">Call Now</div>
+            </div>
+            <div class="action-option" data-action="email_now" onclick="selectAction('email_now')">
+              <div class="action-icon">✉️</div><div class="action-label">Email Now</div>
+            </div>
+            <div class="action-option" data-action="go_to_link" onclick="selectAction('go_to_link')">
+              <div class="action-icon">🔗</div><div class="action-label">Go to Link</div>
+            </div>
+          </div>
+          <div class="action-detail" id="action-detail" style="display:none;">
+            <label id="action-detail-label">Value</label>
+            <input type="text" id="action-value" placeholder="" />
+          </div>
+        </div>
+      </div>
+
+      <!-- POINTS-ONLY: ACTION -->
+      <div id="points-only-fields" style="display:none;">
+        <hr class="divider"/>
+        <div class="form-group">
+          <label>Action Type</label>
+          <div class="actions-grid">
+            <div class="action-option" data-points-action="blog_reading" onclick="selectPointsAction('blog_reading')">
+              <div class="action-icon">📖</div><div class="action-label">Blog Reading</div>
+            </div>
+            <div class="action-option" data-points-action="post_sharing" onclick="selectPointsAction('post_sharing')">
+              <div class="action-icon">📝</div><div class="action-label">Share Blog Post</div>
+            </div>
+            <div class="action-option" data-points-action="social_sharing" onclick="selectPointsAction('social_sharing')">
+              <div class="action-icon">📲</div><div class="action-label">Share Social Post</div>
+            </div>
+            <div class="action-option" data-points-action="share_anything" onclick="selectPointsAction('share_anything')">
+              <div class="action-icon">📱</div><div class="action-label">Share Anything</div>
+            </div>
+            <div class="action-option" data-points-action="buy_product" onclick="selectPointsAction('buy_product')">
+              <div class="action-icon">🛍️</div><div class="action-label">Buy Product</div>
+            </div>
+          </div>
+          <div class="action-detail" id="points-action-detail" style="display:none;">
+            <label id="points-action-detail-label">Value</label>
+            <input type="text" id="points-action-value" placeholder="" />
+            <div id="points-coupon-row" style="display:none; margin-top:10px;">
+              <label style="font-size:12px;font-weight:600;color:#8e8e93;text-transform:uppercase;letter-spacing:0.8px;display:block;margin-bottom:6px;">Coupon Code</label>
+              <input type="text" id="points-coupon-code" placeholder="e.g. SAVE10" />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <button class="btn btn-primary" id="save-btn" onclick="saveDeal()">Save Deal</button>
+      <button class="btn btn-ghost" id="cancel-btn" onclick="resetForm()" style="margin-top:10px;width:100%;display:none;">Cancel Edit</button>
+    </div>
+
+    <!-- DEALS LIST PANEL -->
+    <div class="tab-panel active" id="panel-deal">
+      <div class="deals-header">
+        <h2>Deals</h2>
+        <span id="deal-count" style="color:#8e8e93;font-size:13px;"></span>
+      </div>
+      <div id="deals-list"><div class="loading">Loading deals...</div></div>
+    </div>
+
+    <!-- PRIZE LIST PANEL -->
+    <div class="tab-panel" id="panel-prize">
+      <div class="deals-header">
+        <h2>🏆 Monthly Prizes</h2>
+      </div>
+      <div id="prizes-list"><div class="loading">Loading prizes...</div></div>
+    </div>
+
+    <!-- POINTS LIST PANEL -->
+    <div class="tab-panel" id="panel-points">
+      <div class="deals-header">
+        <h2>⭐ Points Activities</h2>
+        <span id="points-count" style="color:#8e8e93;font-size:13px;"></span>
+      </div>
+      <div id="points-list"><div class="loading">Loading points...</div></div>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="config.js"></script>
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+  import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged }
+    from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+  import { getDatabase, ref, set, get, remove, onValue }
+    from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
+  import { getStorage, ref as sRef, uploadBytes, getDownloadURL }
+    from "https://www.gstatic.com/firebasejs/10.12.0/firebase-storage.js";
+
+  const firebaseConfig = {
+    apiKey: "AIzaSyCTub1YX25-tsduNcasNYWQqD_fitR0Y3w",
+    authDomain: "myezfirebase.firebaseapp.com",
+    databaseURL: "https://myezfirebase.firebaseio.com",
+    projectId: "myezfirebase",
+    storageBucket: "myezfirebase.appspot.com",
+    messagingSenderId: "470577470154",
+    appId: "1:470577470154:web:bd75e76a9d7dd0113cb233"
+  };
+
+  const app = initializeApp(firebaseConfig);
+  const auth = getAuth(app);
+  const db = getDatabase(app);
+  const storage = getStorage(app);
+
+  let currentEditKey = null;
+  let selectedAction = null;
+  let selectedPointsAction = null;
+  let imageMode = 'url';
+  let activeDealCount = 0;
+  let currentCategory = 'deal';
+
+
+  // CATEGORY SWITCH
+  window.switchCategory = (cat) => {
+    currentCategory = cat;
+    ['deal','prize','points'].forEach(c => {
+      document.getElementById(`tab-${c}`).classList.toggle('active', cat === c);
+      document.getElementById(`panel-${c}`).classList.toggle('active', cat === c);
+    });
+    document.getElementById('deal-fields').style.display = cat === 'deal' ? '' : 'none';
+    document.getElementById('prize-fields').style.display = cat === 'prize' ? '' : 'none';
+    document.getElementById('points-fields').style.display = cat === 'points' ? '' : 'none';
+    document.getElementById('deal-only-fields').style.display = cat === 'deal' ? '' : 'none';
+    document.getElementById('points-only-fields').style.display = cat === 'points' ? '' : 'none';
+    document.getElementById('limit-banner').style.display = 'none';
+    const titles = { deal: '➕ Add New Deal', prize: '➕ Add Monthly Prize', points: '➕ Add Points Activity' };
+    const btns   = { deal: 'Save Deal',       prize: 'Save Prize',          points: 'Save Activity' };
+    document.getElementById('form-title').textContent = titles[cat];
+    document.getElementById('save-btn').textContent = btns[cat];
+    resetForm(true);
+  };
+
+  // AUTH
+  const ALLOWED_EMAILS = typeof ADMIN_EMAILS !== 'undefined' ? ADMIN_EMAILS : [];
+
+  onAuthStateChanged(auth, user => {
+    if (user) {
+      if (!ALLOWED_EMAILS.includes(user.email)) {
+        signOut(auth);
+        document.getElementById('login-error').textContent = 'Access denied.';
+        return;
+      }
+      document.getElementById('auth-screen').style.display = 'none';
+      document.getElementById('main-screen').style.display = 'block';
+      document.getElementById('user-email').textContent = user.email;
+      loadDeals();
+      loadPrizes();
+      loadPoints();
+    } else {
+      document.getElementById('auth-screen').style.display = 'flex';
+      document.getElementById('main-screen').style.display = 'none';
+    }
+  });
+
+  document.getElementById('login-btn').addEventListener('click', async () => {
+    const email = document.getElementById('login-email').value.trim();
+    const password = document.getElementById('login-password').value;
+    document.getElementById('login-error').textContent = '';
+    try { await signInWithEmailAndPassword(auth, email, password); }
+    catch { document.getElementById('login-error').textContent = 'Invalid email or password.'; }
+  });
+  document.getElementById('logout-btn').addEventListener('click', () => signOut(auth));
+  document.getElementById('login-password').addEventListener('keydown', e => {
+    if (e.key === 'Enter') document.getElementById('login-btn').click();
+  });
+
+  // LOAD DEALS
+  function loadDeals() {
+    onValue(ref(db, 'dealsLinks'), snapshot => {
+      const data = snapshot.val();
+      const list = document.getElementById('deals-list');
+      const countEl = document.getElementById('deal-count');
+      const limitBanner = document.getElementById('limit-banner');
+
+      if (!data) {
+        list.innerHTML = '<div class="empty-state">No deals yet. Add your first deal above.</div>';
+        countEl.textContent = '';
+        activeDealCount = 0;
+        limitBanner.style.display = 'none';
+        return;
+      }
+
+      const now = Date.now();
+      const entries = Object.entries(data).sort((a, b) => (a[1].sort || 0) - (b[1].sort || 0));
+      activeDealCount = entries.filter(([, d]) => !d.expiresAt || d.expiresAt > now).length;
+      countEl.textContent = `${activeDealCount}/5 active`;
+      limitBanner.style.display = (activeDealCount >= 5 && !currentEditKey) ? 'block' : 'none';
+
+      list.innerHTML = entries.map(([key, deal]) => {
+        const isExpired = deal.expiresAt && deal.expiresAt < now;
+        const expiryText = deal.expiresAt ? `Expires: ${new Date(deal.expiresAt).toLocaleString()}` : 'No expiration';
+        return `
+          <div class="deal-card ${isExpired ? 'expired' : ''}">
+            ${deal.imageURL ? `<img class="deal-thumb" src="${deal.imageURL}" alt="${deal.name}" />` : `<div class="deal-thumb-placeholder">🖼️</div>`}
+            <div class="deal-info">
+              <h3>${deal.emoji || ''} ${deal.name || 'Unnamed'}</h3>
+              ${deal.subtitle ? `<p>${deal.subtitle}</p>` : ''}
+              <p>${actionLabel(deal.actionType)}: ${deal.actionValue || '—'}</p>
+              <p style="font-size:12px;color:#555;">${expiryText}</p>
+              <span class="deal-badge ${isExpired ? 'expired-badge' : 'active-badge'}">${isExpired ? 'Expired' : 'Active'}</span>
+              <span class="deal-badge">${deal.actionType || '—'}</span>
+            </div>
+            <div class="deal-actions">
+              <span class="sort-badge">#${deal.sort || '?'}</span>
+              <button class="btn btn-ghost" style="font-size:13px;padding:6px 14px;" onclick="window.editDeal('${key}')">Edit</button>
+              <button class="btn btn-danger" onclick="window.deleteDeal('${key}')">Delete</button>
+            </div>
+          </div>`;
+      }).join('');
+    });
+  }
+
+  // LOAD PRIZES
+  function loadPrizes() {
+    onValue(ref(db, 'monthly_prize'), snapshot => {
+      const data = snapshot.val();
+      const list = document.getElementById('prizes-list');
+
+      if (!data) {
+        list.innerHTML = '<div class="empty-state">No prizes yet.</div>';
+        return;
+      }
+
+      const now = Date.now();
+      const entries = Object.entries(data);
+
+      list.innerHTML = entries.map(([key, prize]) => {
+        const isExpired = prize.expiresAt && prize.expiresAt < now;
+        const expiryText = prize.expiresAt ? `Expires: ${new Date(prize.expiresAt).toLocaleString()}` : 'No expiration';
+        return `
+          <div class="deal-card ${isExpired ? 'expired' : ''}">
+            ${prize.imageURL ? `<img class="deal-thumb" src="${prize.imageURL}" alt="${prize.name}" />` : `<div class="deal-thumb-placeholder">🏆</div>`}
+            <div class="deal-info">
+              <h3>🏆 ${prize.name || 'Unnamed'}</h3>
+              <p style="font-size:12px;color:#555;">${expiryText}</p>
+              <span class="deal-badge prize-badge">Monthly Prize</span>
+              <span class="deal-badge ${isExpired ? 'expired-badge' : 'active-badge'}">${isExpired ? 'Expired' : 'Active'}</span>
+            </div>
+            <div class="deal-actions">
+              <button class="btn btn-ghost" style="font-size:13px;padding:6px 14px;" onclick="window.editPrize('${key}')">Edit</button>
+              <button class="btn btn-danger" onclick="window.deletePrize('${key}')">Delete</button>
+            </div>
+          </div>`;
+      }).join('');
+    });
+  }
+
+  function actionLabel(type) {
+    const map = { add_to_cart:'🛒 Cart URL', text_now:'💬 Phone', call_now:'📞 Phone', email_now:'✉️ Email', go_to_link:'🔗 URL' };
+    return map[type] || 'Action';
+  }
+
+  // SAVE
+  window.saveDeal = async () => {
+    const btn = document.getElementById('save-btn');
+    btn.disabled = true; btn.textContent = 'Saving...';
+
+    let imageURL = imageMode === 'url' ? document.getElementById('deal-image-url').value.trim() : null;
+
+    // Upload image if available
+        if (croppedBlob && currentCategory === 'deal') {
+          try {
+            const filename = `deals/${Date.now()}_cropped.jpg`;
+            const fileRef = sRef(storage, filename);
+            await uploadBytes(fileRef, croppedBlob);
+            imageURL = await getDownloadURL(fileRef);
+          } catch {
+            showToast('Image upload failed.', 'error');
+            btn.disabled = false; btn.textContent = 'Save Deal';
+            return;
+          }
+        } else if (originalBlob && currentCategory === 'prize') {
+          try {
+            const filename = `prizes/${Date.now()}_prize.jpg`;
+            const fileRef = sRef(storage, filename);
+            await uploadBytes(fileRef, originalBlob);
+            imageURL = await getDownloadURL(fileRef);
+          } catch {
+            showToast('Image upload failed.', 'error');
+            btn.disabled = false; btn.textContent = 'Save Prize';
+            return;
+          }
+        }
+
+    const key = currentEditKey || Date.now().toString();
+
+    if (currentCategory === 'points') {
+      const name = document.getElementById('points-name').value.trim();
+      const subtitle = document.getElementById('points-subtitle').value.trim();
+      const sort = parseInt(document.getElementById('points-sort').value) || 1;
+      const points = parseInt(document.getElementById('points-value').value) || 0;
+      const expiryInput = document.getElementById('points-expiry').value;
+      const expiresAt = expiryInput ? new Date(expiryInput).getTime() : null;
+      const actionValue = document.getElementById('points-action-value').value.trim();
+      const couponCode = document.getElementById('points-coupon-code').value.trim();
+
+      if (!name) { showToast('Activity name is required.', 'error'); btn.disabled = false; btn.textContent = 'Save Activity'; return; }
+      if (!selectedPointsAction) { showToast('Please select an action type.', 'error'); btn.disabled = false; btn.textContent = 'Save Activity'; return; }
+      if (!points || points < 1) { showToast('Points value must be at least 1.', 'error'); btn.disabled = false; btn.textContent = 'Save Activity'; return; }
+
+      const activity = {
+        name,
+        subtitle: subtitle || '',
+        sort,
+        points,
+        imageURL: imageURL || '',
+        actionType: selectedPointsAction,
+        actionValue: actionValue || '',
+        ...(selectedPointsAction === 'buy_product' && couponCode ? { coupon_code: couponCode } : {}),
+        ...(expiresAt ? { expiresAt } : {})
+      };
+
+      try {
+        await set(ref(db, `pointsActivities/${key}`), activity);
+        showToast(currentEditKey ? 'Activity updated!' : 'Activity added!', 'success');
+        resetForm();
+      } catch { showToast('Failed to save activity.', 'error'); }
+
+    } else if (currentCategory === 'prize') {
+      const name = document.getElementById('prize-name').value.trim();
+      const expiryInput = document.getElementById('prize-expiry').value;
+      const expiresAt = expiryInput ? new Date(expiryInput).getTime() : null;
+
+      if (!name) { showToast('Prize name is required.', 'error'); btn.disabled = false; btn.textContent = 'Save Prize'; return; }
+
+      // Check if a prize already exists and warn before replacing
+      if (!currentEditKey) {
+        const existing = await get(ref(db, 'monthly_prize'));
+        if (existing.exists()) {
+          const confirmed = confirm('⚠️ A monthly prize already exists. Saving will replace it. Continue?');
+          if (!confirmed) { btn.disabled = false; btn.textContent = 'Save Prize'; return; }
+          // Remove all existing prizes before saving the new one
+          await remove(ref(db, 'monthly_prize'));
+        }
+      }
+
+      const prize = {
+        name,
+        imageURL: imageURL || '',
+        ...(expiresAt ? { expiresAt } : {})
+      };
+
+      try {
+        await set(ref(db, `monthly_prize/${key}`), prize);
+        showToast(currentEditKey ? 'Prize updated!' : 'Prize saved!', 'success');
+        resetForm();
+      } catch { showToast('Failed to save prize.', 'error'); }
+
+    } else {
+      const name = document.getElementById('deal-name').value.trim();
+      const subtitle = document.getElementById('deal-subtitle').value.trim();
+      const sort = parseInt(document.getElementById('deal-sort').value) || 1;
+      const expiryInput = document.getElementById('deal-expiry').value;
+      const expiresAt = expiryInput ? new Date(expiryInput).getTime() : null;
+      const actionValue = document.getElementById('action-value').value.trim();
+
+      if (!name) { showToast('Deal name is required.', 'error'); btn.disabled = false; btn.textContent = 'Save Deal'; return; }
+      if (!selectedAction) { showToast('Please select an action type.', 'error'); btn.disabled = false; btn.textContent = 'Save Deal'; return; }
+      if (!currentEditKey && activeDealCount >= 5) { showToast('Maximum 5 active deals reached.', 'error'); btn.disabled = false; btn.textContent = 'Save Deal'; return; }
+
+      // Auto-convert Shopify product URL to cart URL
+      let finalActionValue = actionValue;
+      if (selectedAction === 'add_to_cart') {
+        const variantMatch = actionValue.match(/[?&]variant=(\d+)/);
+        if (variantMatch && variantMatch[1]) {
+          finalActionValue = `https://www.ezinflatables.com/cart/add?id=${variantMatch[1]}&quantity=1`;
+        }
+      }
+
+      const deal = {
+        name,
+        subtitle: subtitle || '',
+        sort,
+        imageURL: imageURL || '',
+        actionType: selectedAction,
+        actionValue: finalActionValue || '',
+        ...(expiresAt ? { expiresAt } : {})
+      };
+
+      try {
+        await set(ref(db, `dealsLinks/${key}`), deal);
+        showToast(currentEditKey ? 'Deal updated!' : 'Deal added!', 'success');
+        resetForm();
+      } catch { showToast('Failed to save deal.', 'error'); }
+    }
+
+    btn.disabled = false;
+    const btnLabels = { deal: 'Save Deal', prize: 'Save Prize', points: 'Save Activity' };
+    btn.textContent = btnLabels[currentCategory] || 'Save';
+  };
+
+  // EDIT DEAL
+  window.editDeal = async (key) => {
+    switchCategory('deal');
+    const snap = await get(ref(db, `dealsLinks/${key}`));
+    const deal = snap.val();
+    if (!deal) return;
+    currentEditKey = key;
+    document.getElementById('form-title').textContent = '✏️ Edit Deal';
+    document.getElementById('deal-name').value = deal.name || '';
+    document.getElementById('deal-subtitle').value = deal.subtitle || '';
+    document.getElementById('deal-sort').value = deal.sort || 1;
+    document.getElementById('deal-image-url').value = deal.imageURL || '';
+    document.getElementById('cancel-btn').style.display = 'block';
+    document.getElementById('limit-banner').style.display = 'none';
+    if (deal.expiresAt) {
+      const d = new Date(deal.expiresAt);
+      document.getElementById('deal-expiry').value = new Date(d.getTime() - d.getTimezoneOffset()*60000).toISOString().slice(0,16);
+    }
+    if (deal.imageURL) cropAndPreview(deal.imageURL, document.getElementById('image-preview'));
+    if (deal.emoji) {
+      selectedEmoji = deal.emoji;
+      document.getElementById('emoji-display').textContent = deal.emoji;
+      document.querySelectorAll('.emoji-btn').forEach(b => b.classList.toggle('selected', b.textContent === deal.emoji));
+    }
+    selectAction(deal.actionType);
+    document.getElementById('action-value').value = deal.actionValue || '';
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  // EDIT PRIZE
+  window.editPrize = async (key) => {
+    switchCategory('prize');
+    const snap = await get(ref(db, `monthly_prize/${key}`));
+    const prize = snap.val();
+    if (!prize) return;
+    currentEditKey = key;
+    document.getElementById('form-title').textContent = '✏️ Edit Prize';
+    document.getElementById('prize-name').value = prize.name || '';
+    document.getElementById('deal-image-url').value = prize.imageURL || '';
+    document.getElementById('cancel-btn').style.display = 'block';
+    if (prize.expiresAt) {
+      const d = new Date(prize.expiresAt);
+      document.getElementById('prize-expiry').value = new Date(d.getTime() - d.getTimezoneOffset()*60000).toISOString().slice(0,16);
+    }
+    if (prize.imageURL) showPrizePreview(prize.imageURL);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  // DELETE
+  window.deleteDeal = async (key) => {
+    if (!confirm('Delete this deal?')) return;
+    await remove(ref(db, `dealsLinks/${key}`));
+    showToast('Deal deleted.', 'success');
+  };
+
+  window.deletePrize = async (key) => {
+    if (!confirm('Delete this prize?')) return;
+    await remove(ref(db, `monthly_prize/${key}`));
+    showToast('Prize deleted.', 'success');
+  };
+
+  // EDIT POINTS
+  window.editPoints = async (key) => {
+    switchCategory('points');
+    const snap = await get(ref(db, `pointsActivities/${key}`));
+    const item = snap.val();
+    if (!item) return;
+    currentEditKey = key;
+    document.getElementById('form-title').textContent = '✏️ Edit Points Activity';
+    document.getElementById('points-name').value = item.name || '';
+    document.getElementById('points-subtitle').value = item.subtitle || '';
+    document.getElementById('points-sort').value = item.sort || 1;
+    document.getElementById('points-value').value = item.points || '';
+    document.getElementById('deal-image-url').value = item.imageURL || '';
+    document.getElementById('cancel-btn').style.display = 'block';
+    if (item.expiresAt) {
+      const d = new Date(item.expiresAt);
+      document.getElementById('points-expiry').value = new Date(d.getTime() - d.getTimezoneOffset()*60000).toISOString().slice(0,16);
+    }
+    if (item.imageURL) cropAndPreview(item.imageURL, document.getElementById('image-preview'));
+    if (item.actionType) {
+      selectPointsAction(item.actionType);
+      document.getElementById('points-action-value').value = item.actionValue || '';
+      if (item.actionType === 'buy_product') {
+        document.getElementById('points-coupon-code').value = item.coupon_code || '';
+      }
+    }
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  window.deletePoints = async (key) => {
+    if (!confirm('Delete this points activity?')) return;
+    await remove(ref(db, `pointsActivities/${key}`));
+    showToast('Activity deleted.', 'success');
+  };
+
+  // RESET
+  window.resetForm = (keepCategory = false) => {
+    currentEditKey = null; selectedAction = null; selectedPointsAction = null; window._pendingFile = null; croppedBlob = null;
+    if (!keepCategory) {
+      document.getElementById('form-title').textContent = currentCategory === 'prize' ? '➕ Add Monthly Prize' : '➕ Add New Deal';
+    }
+    ['deal-name','deal-subtitle','deal-sort','deal-expiry','prize-name','prize-expiry','deal-image-url','action-value',
+     'points-name','points-subtitle','points-sort','points-expiry','points-value','points-action-value','points-coupon-code'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.value = '';
+    });
+    const preview = document.getElementById('image-preview');
+    preview.innerHTML = '<span class="empty-label">No image selected — crop preview will appear here</span>';
+    preview.style.height = '';
+    document.getElementById('action-detail').style.display = 'none';
+    document.getElementById('points-action-detail').style.display = 'none';
+    document.getElementById('cancel-btn').style.display = 'none';
+    document.querySelectorAll('.action-option').forEach(el => el.classList.remove('selected'));
+  };
+
+  // ACTION SELECT
+  window.selectAction = (type) => {
+    selectedAction = type;
+    document.querySelectorAll('.action-option').forEach(el => el.classList.toggle('selected', el.dataset.action === type));
+    const config = {
+      add_to_cart: { label:'Product URL', placeholder:'https://ezinflatables.com/products/...' },
+      text_now:    { label:'Phone Number', placeholder:'+1 (555) 000-0000' },
+      call_now:    { label:'Phone Number', placeholder:'+1 (555) 000-0000' },
+      email_now:   { label:'Email Address', placeholder:'sales@ezinflatables.com' },
+      go_to_link:  { label:'URL', placeholder:'https://...' },
+    };
+    document.getElementById('action-detail-label').textContent = config[type]?.label || 'Value';
+    document.getElementById('action-value').placeholder = config[type]?.placeholder || '';
+    document.getElementById('action-detail').style.display = 'block';
+  };
+
+  // POINTS ACTION SELECT
+  window.selectPointsAction = (type) => {
+    selectedPointsAction = type;
+    document.querySelectorAll('[data-points-action]').forEach(el => el.classList.toggle('selected', el.dataset.pointsAction === type));
+    const config = {
+      blog_reading:    { label: 'Blog URL',     placeholder: 'https://ezinflatables.com/blogs/...' },
+      post_sharing:    { label: 'Post URL',     placeholder: 'https://ezinflatables.com/blogs/...' },
+      social_sharing:  { label: 'Social URL',   placeholder: 'https://instagram.com/...' },
+      share_anything:  { label: 'Share URL',    placeholder: 'https://...' },
+      buy_product:     { label: 'Product URL',  placeholder: 'https://ezinflatables.com/products/...' },
+    };
+    document.getElementById('points-action-detail-label').textContent = config[type]?.label || 'Value';
+    document.getElementById('points-action-value').placeholder = config[type]?.placeholder || '';
+    document.getElementById('points-action-detail').style.display = 'block';
+    document.getElementById('points-coupon-row').style.display = type === 'buy_product' ? 'block' : 'none';
+    if (type !== 'buy_product') document.getElementById('points-coupon-code').value = '';
+  };
+
+  // LOAD POINTS
+  function loadPoints() {
+    onValue(ref(db, 'pointsActivities'), snapshot => {
+      const data = snapshot.val();
+      const list = document.getElementById('points-list');
+      const countEl = document.getElementById('points-count');
+      if (!data) {
+        list.innerHTML = '<div class="empty-state">No points activities yet. Add your first one above.</div>';
+        countEl.textContent = '';
+        return;
+      }
+      const now = Date.now();
+      const entries = Object.entries(data).sort((a, b) => (a[1].sort || 0) - (b[1].sort || 0));
+      const active = entries.filter(([, d]) => !d.expiresAt || d.expiresAt > now).length;
+      countEl.textContent = `${active} active`;
+      const pointsActionLabel = { blog_reading:'📖 Blog Reading', post_sharing:'📝 Share Blog Post', social_sharing:'📲 Share Social Post', share_anything:'📱 Share Anything', buy_product:'🛍️ Buy Product' };
+      list.innerHTML = entries.map(([key, item]) => {
+        const isExpired = item.expiresAt && item.expiresAt < now;
+        const expiryText = item.expiresAt ? `Expires: ${new Date(item.expiresAt).toLocaleString()}` : 'No expiration';
+        return `
+          <div class="deal-card ${isExpired ? 'expired' : ''}">
+            ${item.imageURL ? `<img class="deal-thumb" src="${item.imageURL}" alt="${item.name}" />` : `<div class="deal-thumb-placeholder">⭐</div>`}
+            <div class="deal-info">
+              <h3>${item.name || 'Unnamed'}</h3>
+              ${item.subtitle ? `<p>${item.subtitle}</p>` : ''}
+              <p>${pointsActionLabel[item.actionType] || item.actionType}: ${item.actionValue || '—'}${item.coupon_code ? ` · 🏷️ ${item.coupon_code}` : ''}</p>
+              <p style="font-size:12px;color:#555;">${expiryText}</p>
+              <span class="deal-badge" style="background:rgba(255,214,10,0.15);color:#ffd60a;">⭐ ${item.points || 0} pts</span>
+              <span class="deal-badge ${isExpired ? 'expired-badge' : 'active-badge'}">${isExpired ? 'Expired' : 'Active'}</span>
+            </div>
+            <div class="deal-actions">
+              <span class="sort-badge">#${item.sort || '?'}</span>
+              <button class="btn btn-ghost" style="font-size:13px;padding:6px 14px;" onclick="window.editPoints('${key}')">Edit</button>
+              <button class="btn btn-danger" onclick="window.deletePoints('${key}')">Delete</button>
+            </div>
+          </div>`;
+      }).join('');
+    });
+  }
+
+  // IMAGE TABS
+  window.switchImageTab = (mode) => {
+    imageMode = mode;
+    document.querySelectorAll('.img-tab').forEach((t,i) => t.classList.toggle('active',(i===0&&mode==='url')||(i===1&&mode==='upload')));
+    document.getElementById('image-url-section').style.display = mode==='url'?'block':'none';
+    document.getElementById('image-upload-section').style.display = mode==='upload'?'block':'none';
+  };
+
+  // CROP
+  let croppedBlob = null;
+  let originalBlob = null;
+
+  function cropAndPreview(src, preview) {
+    preview.innerHTML = '';
+    preview.style.height = '';
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.src = src;
+    img.onload = () => {
+      const targetRatio = 3;
+      let cropW, cropH, cropX, cropY;
+      const naturalRatio = img.naturalWidth / img.naturalHeight;
+      if (naturalRatio > targetRatio) {
+        cropH = img.naturalHeight; cropW = cropH * targetRatio;
+        cropX = (img.naturalWidth - cropW) / 2; cropY = 0;
+      } else {
+        cropW = img.naturalWidth; cropH = cropW / targetRatio;
+        cropX = 0; cropY = (img.naturalHeight - cropH) / 2;
+      }
+      const canvas = document.createElement('canvas');
+      canvas.width = cropW; canvas.height = cropH;
+      canvas.getContext('2d').drawImage(img, cropX, cropY, cropW, cropH, 0, 0, cropW, cropH);
+      canvas.toBlob(blob => { croppedBlob = blob; }, 'image/jpeg', 0.92);
+      const previewImg = document.createElement('img');
+      previewImg.className = 'preview-img';
+      previewImg.src = canvas.toDataURL('image/jpeg', 0.92);
+      const label = document.createElement('div');
+      label.className = 'crop-label';
+      label.textContent = '✂️ Cropped to 1:3 — this is what gets uploaded';
+      const wrapH = Math.min((preview.offsetWidth / targetRatio), 200);
+      preview.style.height = wrapH + 'px';
+      preview.appendChild(previewImg);
+      preview.appendChild(label);
+    };
+    img.onerror = () => { preview.innerHTML = '<span class="empty-label">Invalid image URL</span>'; };
+  }
+
+
+  function showPrizePreview(src) {
+      const preview = document.getElementById('image-preview');
+      preview.innerHTML = '';
+      const img = document.createElement('img');
+      img.className = 'preview-img';
+      img.src = src;
+      img.style.objectFit = 'contain';
+      preview.style.height = preview.offsetWidth + 'px';
+      preview.appendChild(img);
+      const label = document.createElement('div');
+      label.className = 'crop-label';
+      label.textContent = '🏆 Square — no crop';
+      preview.appendChild(label);
+    }
+
+
+    window.previewFromURL = () => {
+        const url = document.getElementById('deal-image-url').value.trim();
+        const preview = document.getElementById('image-preview');
+        croppedBlob = null; originalBlob = null;
+        if (!url) {
+          preview.innerHTML = '<span class="empty-label">No image selected — crop preview will appear here</span>';
+          preview.style.height = ''; return;
+        }
+        if (currentCategory === 'prize') {
+          showPrizePreview(url);
+        } else {
+          cropAndPreview(url, preview);
+        }
+      };
+
+  window.handleFileSelect = (event) => {
+      const file = event.target.files[0];
+      if (!file) return;
+      window._pendingFile = file; croppedBlob = null; originalBlob = null;
+      const reader = new FileReader();
+      reader.onload = e => {
+        if (currentCategory === 'prize') {
+          // Store original blob for prize — no crop
+          fetch(e.target.result).then(r => r.blob()).then(b => { originalBlob = b; });
+          // Show square preview
+          const preview = document.getElementById('image-preview');
+          preview.innerHTML = '';
+          const img = document.createElement('img');
+          img.className = 'preview-img';
+          img.src = e.target.result;
+          img.style.objectFit = 'cover';
+          preview.style.height = preview.offsetWidth + 'px';
+          preview.appendChild(img);
+        } else {
+          cropAndPreview(e.target.result, document.getElementById('image-preview'));
+        }
+      };
+      reader.readAsDataURL(file);
+    };
+
+  const dropZone = document.getElementById('file-drop');
+  dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+  dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
+  dropZone.addEventListener('drop', e => {
+    e.preventDefault(); dropZone.classList.remove('drag-over');
+    const file = e.dataTransfer.files[0];
+    if (!file) return;
+    window._pendingFile = file; croppedBlob = null;
+    const reader = new FileReader();
+    reader.onload = ev => {
+      if (currentCategory === 'prize') {
+        fetch(ev.target.result).then(r => r.blob()).then(b => { originalBlob = b; });
+        showPrizePreview(ev.target.result);
+      } else {
+        cropAndPreview(ev.target.result, document.getElementById('image-preview'));
+      }
+    };
+    reader.readAsDataURL(file);
+  });
+
+  function showToast(msg, type='success') {
+    const t = document.getElementById('toast');
+    t.textContent = msg; t.className = `toast ${type}`; t.style.display = 'block';
+    setTimeout(() => t.style.display = 'none', 3500);
+  }
+</script>
+</body>
+</html>
