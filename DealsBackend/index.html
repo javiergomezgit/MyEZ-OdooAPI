@@ -96,6 +96,15 @@
     .limit-banner { background: rgba(255,159,10,0.1); border: 1px solid rgba(255,159,10,0.3); border-radius: 10px; padding: 12px 16px; margin-bottom: 16px; font-size: 13px; color: #ff9f0a; display: none; }
     .section-label { font-size: 13px; font-weight: 700; color: #8e8e93; text-transform: uppercase; letter-spacing: 1px; margin: 24px 0 10px; }
 
+    .link-preview { background: #2c2c2e; border: 1px solid #3a3a3c; border-radius: 10px; padding: 14px 16px; margin-top: -8px; margin-bottom: 16px; }
+    .link-preview-inner { display: flex; align-items: center; gap: 12px; }
+    .link-preview-icon { font-size: 22px; flex-shrink: 0; }
+    .link-preview-info { flex: 1; min-width: 0; }
+    .link-preview-domain { font-size: 14px; font-weight: 600; color: #f0f0f0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .link-preview-path { font-size: 12px; color: #8e8e93; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 2px; }
+    input.url-valid { border-color: #30d158; }
+    input.url-invalid { border-color: #ff453a; }
+
     .toast { position: fixed; bottom: 24px; right: 24px; background: #1c1c1e; border: 1px solid #2c2c2e; border-radius: 12px; padding: 14px 20px; font-size: 14px; display: none; z-index: 999; box-shadow: 0 8px 32px rgba(0,0,0,0.4); }
     .toast.success { border-color: #30d158; color: #30d158; }
     .toast.error { border-color: #ff453a; color: #ff453a; }
@@ -143,6 +152,7 @@
       <button class="page-tab active" id="tab-deal" onclick="switchCategory('deal')">🏷️ Top Deal</button>
       <button class="page-tab" id="tab-prize" onclick="switchCategory('prize')">🏆 Monthly Prize</button>
       <button class="page-tab" id="tab-points" onclick="switchCategory('points')">⭐ Points</button>
+      <button class="page-tab" id="tab-links" onclick="switchCategory('links')">🔗 Links</button>
     </div>
 
     <div class="limit-banner" id="limit-banner">⚠️ Maximum of 5 active deals reached. Delete or expire an existing deal before adding a new one.</div>
@@ -319,6 +329,60 @@
       <div id="prizes-list"><div class="loading">Loading prizes...</div></div>
     </div>
 
+    <!-- LINKS PANEL -->
+    <div class="tab-panel" id="panel-links">
+      <div class="form-card">
+        <h2>🔗 App General Links</h2>
+        <p style="color:#8e8e93;font-size:13px;margin-bottom:24px;">These URLs are used across the app. Changes take effect immediately after saving.</p>
+
+        <!-- Browse URL -->
+        <div class="form-group">
+          <label>Browse Page URL <span style="color:#555;font-weight:400;text-transform:none;letter-spacing:0;">(main shop/browse tab)</span></label>
+          <div style="display:flex;gap:10px;align-items:center;">
+            <input type="url" id="link-browse-url" placeholder="https://ezinflatables.com/..." oninput="validateLinkField('browse')" style="flex:1;" />
+            <span id="link-browse-status" style="font-size:18px;flex-shrink:0;width:24px;text-align:center;"></span>
+          </div>
+          <span class="error-msg" id="link-browse-error"></span>
+        </div>
+        <div class="link-preview" id="link-browse-preview" style="display:none;">
+          <div class="link-preview-inner">
+            <span class="link-preview-icon">🌐</span>
+            <div class="link-preview-info">
+              <div class="link-preview-domain" id="link-browse-domain"></div>
+              <div class="link-preview-path" id="link-browse-path"></div>
+            </div>
+            <a id="link-browse-open" href="#" target="_blank" rel="noopener" class="btn btn-ghost" style="font-size:12px;padding:6px 12px;">Open ↗</a>
+          </div>
+        </div>
+
+        <hr class="divider" />
+
+        <!-- Manual URL -->
+        <div class="form-group">
+          <label>Manual URL <span style="color:#555;font-weight:400;text-transform:none;letter-spacing:0;">(user manual / guide)</span></label>
+          <div style="display:flex;gap:10px;align-items:center;">
+            <input type="url" id="link-manual-url" placeholder="https://ezinflatables.com/..." oninput="validateLinkField('manual')" style="flex:1;" />
+            <span id="link-manual-status" style="font-size:18px;flex-shrink:0;width:24px;text-align:center;"></span>
+          </div>
+          <span class="error-msg" id="link-manual-error"></span>
+        </div>
+        <div class="link-preview" id="link-manual-preview" style="display:none;">
+          <div class="link-preview-inner">
+            <span class="link-preview-icon">🌐</span>
+            <div class="link-preview-info">
+              <div class="link-preview-domain" id="link-manual-domain"></div>
+              <div class="link-preview-path" id="link-manual-path"></div>
+            </div>
+            <a id="link-manual-open" href="#" target="_blank" rel="noopener" class="btn btn-ghost" style="font-size:12px;padding:6px 12px;">Open ↗</a>
+          </div>
+        </div>
+
+        <hr class="divider" />
+
+        <button class="btn btn-primary" id="save-links-btn" onclick="saveLinks()">Save Links</button>
+      </div>
+    </div>
+
     <!-- POINTS LIST PANEL -->
     <div class="tab-panel" id="panel-points">
       <div class="deals-header">
@@ -368,16 +432,19 @@
   // CATEGORY SWITCH
   window.switchCategory = (cat) => {
     currentCategory = cat;
-    ['deal','prize','points'].forEach(c => {
+    ['deal','prize','points','links'].forEach(c => {
       document.getElementById(`tab-${c}`).classList.toggle('active', cat === c);
       document.getElementById(`panel-${c}`).classList.toggle('active', cat === c);
     });
+    // Hide the shared form card on the links tab
+    document.querySelector('.form-card').style.display = cat === 'links' ? 'none' : '';
+    document.getElementById('limit-banner').style.display = 'none';
+    if (cat === 'links') return;
     document.getElementById('deal-fields').style.display = cat === 'deal' ? '' : 'none';
     document.getElementById('prize-fields').style.display = cat === 'prize' ? '' : 'none';
     document.getElementById('points-fields').style.display = cat === 'points' ? '' : 'none';
     document.getElementById('deal-only-fields').style.display = cat === 'deal' ? '' : 'none';
     document.getElementById('points-only-fields').style.display = cat === 'points' ? '' : 'none';
-    document.getElementById('limit-banner').style.display = 'none';
     const titles = { deal: '➕ Add New Deal', prize: '➕ Add Monthly Prize', points: '➕ Add Points Activity' };
     const btns   = { deal: 'Save Deal',       prize: 'Save Prize',          points: 'Save Activity' };
     document.getElementById('form-title').textContent = titles[cat];
@@ -401,6 +468,7 @@
       loadDeals();
       loadPrizes();
       loadPoints();
+      loadLinks();
     } else {
       document.getElementById('auth-screen').style.display = 'flex';
       document.getElementById('main-screen').style.display = 'none';
@@ -976,6 +1044,80 @@
     };
     reader.readAsDataURL(file);
   });
+
+  // LINKS
+  function loadLinks() {
+    get(ref(db, 'general_urls')).then(snapshot => {
+      const data = snapshot.val() || {};
+      if (data.browse_url) {
+        document.getElementById('link-browse-url').value = data.browse_url;
+        validateLinkField('browse');
+      }
+      if (data.manual_url) {
+        document.getElementById('link-manual-url').value = data.manual_url;
+        validateLinkField('manual');
+      }
+    });
+  }
+
+  function isValidURL(str) {
+    try { const u = new URL(str); return u.protocol === 'http:' || u.protocol === 'https:'; }
+    catch { return false; }
+  }
+
+  window.validateLinkField = (key) => {
+    const input = document.getElementById(`link-${key}-url`);
+    const status = document.getElementById(`link-${key}-status`);
+    const error = document.getElementById(`link-${key}-error`);
+    const preview = document.getElementById(`link-${key}-preview`);
+    const val = input.value.trim();
+
+    input.classList.remove('url-valid', 'url-invalid');
+    status.textContent = '';
+    error.textContent = '';
+    preview.style.display = 'none';
+
+    if (!val) return;
+
+    if (!isValidURL(val)) {
+      input.classList.add('url-invalid');
+      status.textContent = '❌';
+      error.textContent = 'Please enter a valid URL starting with https://';
+      return;
+    }
+
+    input.classList.add('url-valid');
+    status.textContent = '✅';
+
+    const u = new URL(val);
+    document.getElementById(`link-${key}-domain`).textContent = u.hostname;
+    document.getElementById(`link-${key}-path`).textContent = u.pathname + u.search || '/';
+    document.getElementById(`link-${key}-open`).href = val;
+    preview.style.display = 'block';
+  };
+
+  window.saveLinks = async () => {
+    const browseVal = document.getElementById('link-browse-url').value.trim();
+    const manualVal = document.getElementById('link-manual-url').value.trim();
+
+    if (browseVal && !isValidURL(browseVal)) { showToast('Browse URL is not valid.', 'error'); return; }
+    if (manualVal && !isValidURL(manualVal)) { showToast('Manual URL is not valid.', 'error'); return; }
+    if (!browseVal && !manualVal) { showToast('Enter at least one URL.', 'error'); return; }
+
+    const btn = document.getElementById('save-links-btn');
+    btn.disabled = true; btn.textContent = 'Saving...';
+
+    const data = {};
+    if (browseVal) data.browse_url = browseVal;
+    if (manualVal) data.manual_url = manualVal;
+
+    try {
+      await set(ref(db, 'general_urls'), data);
+      showToast('Links saved!', 'success');
+    } catch { showToast('Failed to save links.', 'error'); }
+
+    btn.disabled = false; btn.textContent = 'Save Links';
+  };
 
   function showToast(msg, type='success') {
     const t = document.getElementById('toast');
