@@ -290,8 +290,8 @@
             <div class="action-option" data-points-action="social_sharing" onclick="selectPointsAction('social_sharing')">
               <div class="action-icon">📲</div><div class="action-label">Share Social Post</div>
             </div>
-            <div class="action-option" data-points-action="share_anything" onclick="selectPointsAction('share_anything')">
-              <div class="action-icon">📱</div><div class="action-label">Share Anything</div>
+            <div class="action-option" data-points-action="go_to" onclick="selectPointsAction('go_to')">
+              <div class="action-icon">🚀</div><div class="action-label">Go To</div>
             </div>
             <div class="action-option" data-points-action="buy_product" onclick="selectPointsAction('buy_product')">
               <div class="action-icon">🛍️</div><div class="action-label">Buy Product</div>
@@ -303,6 +303,31 @@
             <div id="points-coupon-row" style="display:none; margin-top:10px;">
               <label style="font-size:12px;font-weight:600;color:#8e8e93;text-transform:uppercase;letter-spacing:0.8px;display:block;margin-bottom:6px;">Coupon Code</label>
               <input type="text" id="points-coupon-code" placeholder="e.g. SAVE10" />
+            </div>
+            <div id="points-goto-fields" style="display:none; margin-top:14px; display:none;">
+              <div style="display:flex;gap:14px;flex-wrap:wrap;margin-top:10px;">
+                <div style="flex:1;min-width:140px;">
+                  <label style="font-size:12px;font-weight:600;color:#8e8e93;text-transform:uppercase;letter-spacing:0.8px;display:block;margin-bottom:6px;">Emoji <span style="font-weight:400;text-transform:none;">(default ⭐)</span></label>
+                  <div style="display:flex;gap:10px;align-items:center;">
+                    <input type="text" id="points-emoji" placeholder="⭐" maxlength="4" style="width:64px;font-size:24px;text-align:center;" oninput="updatePointsEmojiPreview()" />
+                    <span id="points-emoji-preview" style="font-size:30px;min-width:36px;">⭐</span>
+                  </div>
+                </div>
+                <div style="flex:2;min-width:160px;">
+                  <label style="font-size:12px;font-weight:600;color:#8e8e93;text-transform:uppercase;letter-spacing:0.8px;display:block;margin-bottom:6px;">Button Label</label>
+                  <select id="points-subtype" style="background:#2c2c2e;color:#f2f2f7;border:1px solid #3a3a3c;border-radius:10px;padding:10px 14px;font-size:15px;width:100%;">
+                    <option value="">— Select label —</option>
+                    <option value="go_to">Go To</option>
+                    <option value="click">Click</option>
+                    <option value="share">Share</option>
+                    <option value="follow">Follow</option>
+                    <option value="watch">Watch</option>
+                    <option value="review">Review</option>
+                    <option value="buy">Buy</option>
+                    <option value="read">Read</option>
+                  </select>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -359,7 +384,7 @@
 
         <!-- Manual URL -->
         <div class="form-group">
-          <label>Manual URL <span style="color:#555;font-weight:400;text-transform:none;letter-spacing:0;">(user manual / guide)</span></label>
+          <label>General Manual URL <span style="color:#555;font-weight:400;text-transform:none;letter-spacing:0;">(user manual / guide)</span></label>
           <div style="display:flex;gap:10px;align-items:center;">
             <input type="url" id="link-manual-url" placeholder="https://ezinflatables.com/..." oninput="validateLinkField('manual')" style="flex:1;" />
             <span id="link-manual-status" style="font-size:18px;flex-shrink:0;width:24px;text-align:center;"></span>
@@ -374,6 +399,28 @@
               <div class="link-preview-path" id="link-manual-path"></div>
             </div>
             <a id="link-manual-open" href="#" target="_blank" rel="noopener" class="btn btn-ghost" style="font-size:12px;padding:6px 12px;">Open ↗</a>
+          </div>
+        </div>
+
+        <hr class="divider" />
+
+        <!-- Catalog URL -->
+        <div class="form-group">
+          <label>Catalog URL <span style="color:#555;font-weight:400;text-transform:none;letter-spacing:0;">(product catalog)</span></label>
+          <div style="display:flex;gap:10px;align-items:center;">
+            <input type="url" id="link-catalog-url" placeholder="https://ezinflatables.com/..." oninput="validateLinkField('catalog')" style="flex:1;" />
+            <span id="link-catalog-status" style="font-size:18px;flex-shrink:0;width:24px;text-align:center;"></span>
+          </div>
+          <span class="error-msg" id="link-catalog-error"></span>
+        </div>
+        <div class="link-preview" id="link-catalog-preview" style="display:none;">
+          <div class="link-preview-inner">
+            <span class="link-preview-icon">🌐</span>
+            <div class="link-preview-info">
+              <div class="link-preview-domain" id="link-catalog-domain"></div>
+              <div class="link-preview-path" id="link-catalog-path"></div>
+            </div>
+            <a id="link-catalog-open" href="#" target="_blank" rel="noopener" class="btn btn-ghost" style="font-size:12px;padding:6px 12px;">Open ↗</a>
           </div>
         </div>
 
@@ -619,7 +666,6 @@
       const expiresAt = expiryInput ? new Date(expiryInput).getTime() : null;
       const actionValue = document.getElementById('points-action-value').value.trim();
       const couponCode = document.getElementById('points-coupon-code').value.trim();
-
       if (!name) { showToast('Activity name is required.', 'error'); btn.disabled = false; btn.textContent = 'Save Activity'; return; }
       if (!selectedPointsAction) { showToast('Please select an action type.', 'error'); btn.disabled = false; btn.textContent = 'Save Activity'; return; }
       if (!points || points < 1) { showToast('Points value must be at least 1.', 'error'); btn.disabled = false; btn.textContent = 'Save Activity'; return; }
@@ -632,6 +678,10 @@
         imageURL: imageURL || '',
         actionType: selectedPointsAction,
         actionValue: actionValue || '',
+        ...(selectedPointsAction === 'go_to' ? {
+          emoji: document.getElementById('points-emoji').value.trim() || '⭐',
+          ...(document.getElementById('points-subtype').value ? { subtype: document.getElementById('points-subtype').value } : {})
+        } : {}),
         ...(selectedPointsAction === 'buy_product' && couponCode ? { coupon_code: couponCode } : {}),
         ...(expiresAt ? { expiresAt } : {})
       };
@@ -802,6 +852,12 @@
         document.getElementById('points-coupon-code').value = item.coupon_code || '';
       }
     }
+    if (item.actionType === 'go_to') {
+      const emojiVal = item.emoji || '⭐';
+      document.getElementById('points-emoji').value = emojiVal;
+      document.getElementById('points-emoji-preview').textContent = emojiVal;
+      document.getElementById('points-subtype').value = item.subtype || '';
+    }
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -817,6 +873,9 @@
     if (!keepCategory) {
       document.getElementById('form-title').textContent = currentCategory === 'prize' ? '➕ Add Monthly Prize' : '➕ Add New Deal';
     }
+    document.getElementById('points-emoji').value = '';
+    document.getElementById('points-emoji-preview').textContent = '⭐';
+    document.getElementById('points-subtype').value = '';
     ['deal-name','deal-subtitle','deal-sort','deal-expiry','prize-name','prize-expiry','deal-image-url','action-value',
      'points-name','points-subtitle','points-sort','points-expiry','points-value','points-action-value','points-coupon-code'].forEach(id => {
       const el = document.getElementById(id);
@@ -829,6 +888,11 @@
     document.getElementById('points-action-detail').style.display = 'none';
     document.getElementById('cancel-btn').style.display = 'none';
     document.querySelectorAll('.action-option').forEach(el => el.classList.remove('selected'));
+  };
+
+  window.updatePointsEmojiPreview = () => {
+    const val = document.getElementById('points-emoji').value.trim();
+    document.getElementById('points-emoji-preview').textContent = val || '⭐';
   };
 
   // Show a stored image in the preview box without canvas/crop (used when editing)
@@ -871,7 +935,7 @@
       blog_reading:    { label: 'Blog URL',     placeholder: 'https://ezinflatables.com/blogs/...' },
       post_sharing:    { label: 'Post URL',     placeholder: 'https://ezinflatables.com/blogs/...' },
       social_sharing:  { label: 'Social URL',   placeholder: 'https://instagram.com/...' },
-      share_anything:  { label: 'Share URL',    placeholder: 'https://...' },
+      go_to:           { label: 'Destination URL', placeholder: 'https://...' },
       buy_product:     { label: 'Product URL',  placeholder: 'https://ezinflatables.com/products/...' },
     };
     document.getElementById('points-action-detail-label').textContent = config[type]?.label || 'Value';
@@ -879,6 +943,12 @@
     document.getElementById('points-action-detail').style.display = 'block';
     document.getElementById('points-coupon-row').style.display = type === 'buy_product' ? 'block' : 'none';
     if (type !== 'buy_product') document.getElementById('points-coupon-code').value = '';
+    document.getElementById('points-goto-fields').style.display = type === 'go_to' ? 'block' : 'none';
+    if (type !== 'go_to') {
+      document.getElementById('points-emoji').value = '';
+      document.getElementById('points-emoji-preview').textContent = '⭐';
+      document.getElementById('points-subtype').value = '';
+    }
   };
 
   // LOAD POINTS
@@ -896,7 +966,7 @@
       const entries = Object.entries(data).sort((a, b) => (a[1].sort || 0) - (b[1].sort || 0));
       const active = entries.filter(([, d]) => !d.expiresAt || d.expiresAt > now).length;
       countEl.textContent = `${active} active`;
-      const pointsActionLabel = { blog_reading:'📖 Blog Reading', post_sharing:'📝 Share Blog Post', social_sharing:'📲 Share Social Post', share_anything:'📱 Share Anything', buy_product:'🛍️ Buy Product' };
+      const pointsActionLabel = { blog_reading:'📖 Blog Reading', post_sharing:'📝 Share Blog Post', social_sharing:'📲 Share Social Post', go_to:'🚀 Go To', buy_product:'🛍️ Buy Product' };
       list.innerHTML = entries.map(([key, item]) => {
         const isExpired = item.expiresAt && item.expiresAt < now;
         const expiryText = item.expiresAt ? `Expires: ${new Date(item.expiresAt).toLocaleString()}` : 'No expiration';
@@ -1057,6 +1127,10 @@
         document.getElementById('link-manual-url').value = data.manual_url;
         validateLinkField('manual');
       }
+      if (data.catalog_url) {
+        document.getElementById('link-catalog-url').value = data.catalog_url;
+        validateLinkField('catalog');
+      }
     });
   }
 
@@ -1099,10 +1173,12 @@
   window.saveLinks = async () => {
     const browseVal = document.getElementById('link-browse-url').value.trim();
     const manualVal = document.getElementById('link-manual-url').value.trim();
+    const catalogVal = document.getElementById('link-catalog-url').value.trim();
 
     if (browseVal && !isValidURL(browseVal)) { showToast('Browse URL is not valid.', 'error'); return; }
     if (manualVal && !isValidURL(manualVal)) { showToast('Manual URL is not valid.', 'error'); return; }
-    if (!browseVal && !manualVal) { showToast('Enter at least one URL.', 'error'); return; }
+    if (catalogVal && !isValidURL(catalogVal)) { showToast('Catalog URL is not valid.', 'error'); return; }
+    if (!browseVal && !manualVal && !catalogVal) { showToast('Enter at least one URL.', 'error'); return; }
 
     const btn = document.getElementById('save-links-btn');
     btn.disabled = true; btn.textContent = 'Saving...';
@@ -1110,6 +1186,7 @@
     const data = {};
     if (browseVal) data.browse_url = browseVal;
     if (manualVal) data.manual_url = manualVal;
+    if (catalogVal) data.catalog_url = catalogVal;
 
     try {
       await set(ref(db, 'general_urls'), data);
