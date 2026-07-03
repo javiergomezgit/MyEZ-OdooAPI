@@ -88,7 +88,12 @@ def clean_weight(weight_str):
 def clean_email(email_str):
     if not email_str:
         return ""
-    return email_str.strip().lower().split(",")[0].strip()
+    # Handle multiple emails separated by comma or semicolon
+    email = re.split(r"[,;]", email_str.strip())[0].strip().lower()
+    # Validate basic email format
+    if not re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", email):
+        return ""
+    return email
 
 
 def parse_date_to_unix(date_str):

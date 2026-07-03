@@ -128,6 +128,17 @@ def write_firebase_profile(uid, data, check_only=False):
         return False
 
 
+def clean_email(email_str):
+    if not email_str:
+        return ""
+    # Handle multiple emails separated by comma or semicolon
+    email = re.split(r"[,;]", email_str.strip())[0].strip().lower()
+    # Validate basic email format
+    if not re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", email):
+        return ""
+    return email
+
+
 def run_import(csv_path):
     print(f"📂 Reading: {csv_path}\n")
 
@@ -143,7 +154,7 @@ def run_import(csv_path):
             name       = (row.get("Name") or "").strip()
             company    = (row.get("Company") or "").strip()
             phone      = clean_phone(row.get("Phone") or "")
-            email      = (row.get("Email") or "").strip().lower().split(",")[0].strip()
+            email      = clean_email(row.get("Email") or "")
             zip_code   = (row.get("BillToZipcode") or "").strip()
             created_on = (row.get("CreatedOn") or "").strip()
             sales_rep  = (row.get("UserName") or "").strip()
