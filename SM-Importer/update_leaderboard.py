@@ -25,35 +25,13 @@ Requirements:
     pip install firebase-admin python-dotenv --break-system-packages
 """
 
-import base64
-import json
 import os
 from datetime import datetime, timezone
 
-from dotenv import load_dotenv
-
-load_dotenv(dotenv_path=".env")
-
 import firebase_admin
-from firebase_admin import credentials, db
+from firebase_admin import db
 
-
-# ----------------------------------------------------------------
-# FIREBASE SETUP
-# ----------------------------------------------------------------
-
-def init_firebase():
-    key_json = os.getenv("FIREBASE_SERVICE_ACCOUNT")
-    if key_json:
-        key_dict = json.loads(base64.b64decode(key_json).decode("utf-8"))
-        cred = credentials.Certificate(key_dict)
-    else:
-        cred = credentials.Certificate("security/firebase-service-account.json")
-
-    firebase_admin.initialize_app(cred, {
-        "databaseURL": "https://myezfirebase.firebaseio.com"
-    })
-    print("✅ Firebase initialized\n")
+from utils import init_firebase, calculate_score
 
 
 # ----------------------------------------------------------------
@@ -77,19 +55,11 @@ def get_display(profile):
     return (profile.get("zipCode") or "").strip()
 
 
-def calculate_score(transaction):
-    """
-    Calculate score for a single transaction.
-    - type_score "weight": int(weight * 0.25)
-    - type_score "money": int(total * 0.50)
-    """
-    weight     = int(transaction.get("weight", 0))
-    total      = int(transaction.get("total", 0))
-    type_score = transaction.get("type_score", "money")
-
-    if type_score == "weight":
-        return int(weight * 0.25)
-    return int(total * 0.50)
+def score_from_transaction(transaction):
+    """Extract weight/total from a stored transaction dict and calculate score."""
+    weight = int(transaction.get("weight", 0))
+    total  = int(transaction.get("total", 0))
+    return calculate_score(weight, total)
 
 
 # ----------------------------------------------------------------
@@ -136,7 +106,7 @@ def run_update_leaderboard():
 
             created_on = txn.get("createdOn", 0)
             month      = timestamp_to_month(created_on)
-            score      = calculate_score(txn)
+            score      = score_from_transaction(txn)
 
             if month not in monthly_scores:
                 monthly_scores[month] = 0
@@ -169,7 +139,7 @@ def run_update_leaderboard():
     for month, users in leaderboard_data.items():
         try:
             ref = db.reference(f"leaderboards/{month}")
-            ref.set(users)
+            ref.update(users)  # merge — preserves fields added by other processes
             print(f"✅ leaderboards/{month} — {len(users)} users")
             written += 1
         except Exception as e:
@@ -191,6 +161,14 @@ def run_update_leaderboard():
         print("\nErrors:")
         for e in errors:
             print(f"  {e['month']} → {e['error']}")
+
+    return {
+        "users_processed": processed_users,
+        "users_skipped":   skipped_users,
+        "months_written":  written,
+        "errors":          len(errors),
+        "error_list":      errors,
+    }
 
 
 # ----------------------------------------------------------------

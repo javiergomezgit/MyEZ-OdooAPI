@@ -22,9 +22,7 @@ Firebase Service Account:
 """
 
 import argparse
-import base64
 import csv
-import json
 import os
 import re
 import secrets
@@ -32,27 +30,10 @@ import string
 import sys
 from datetime import datetime, timezone
 
-from dotenv import load_dotenv
-
-load_dotenv(dotenv_path=".env")
-
 import firebase_admin
-from firebase_admin import auth, credentials, db
+from firebase_admin import auth, db
 
-
-def init_firebase():
-    """Initialize Firebase Admin SDK."""
-    key_json = os.getenv("FIREBASE_SERVICE_ACCOUNT")
-    if key_json:
-        key_dict = json.loads(base64.b64decode(key_json).decode("utf-8"))
-        cred = credentials.Certificate(key_dict)
-    else:
-        cred = credentials.Certificate("security/firebase-service-account.json")
-
-    firebase_admin.initialize_app(cred, {
-        "databaseURL": "https://myezfirebase.firebaseio.com"
-    })
-    print("✅ Firebase initialized\n")
+from utils import init_firebase, clean_email, parse_date_to_unix
 
 
 PLACEHOLDER_IMAGE = (
@@ -74,20 +55,6 @@ def clean_phone(phone):
     cleaned = re.sub(r"\D", "", phone.strip())
     return cleaned if cleaned not in ["0000000000", ""] else ""
 
-
-def parse_date_to_unix(date_str):
-    """Convert date string like '6/3/2026' to Unix timestamp float."""
-    if not date_str:
-        return datetime.now(timezone.utc).timestamp()
-    try:
-        dt = datetime.strptime(date_str.strip(), "%m/%d/%Y")
-        return dt.replace(tzinfo=timezone.utc).timestamp()
-    except Exception:
-        try:
-            dt = datetime.strptime(date_str.strip(), "%Y-%m-%d")
-            return dt.replace(tzinfo=timezone.utc).timestamp()
-        except Exception:
-            return datetime.now(timezone.utc).timestamp()
 
 
 def email_exists_in_auth(email):
@@ -126,17 +93,6 @@ def write_firebase_profile(uid, data, check_only=False):
     except Exception as e:
         print(f"  ❌ Firebase DB error: {e}")
         return False
-
-
-def clean_email(email_str):
-    if not email_str:
-        return ""
-    # Handle multiple emails separated by comma or semicolon
-    email = re.split(r"[,;]", email_str.strip())[0].strip().lower()
-    # Validate basic email format
-    if not re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", email):
-        return ""
-    return email
 
 
 def run_import(csv_path):
@@ -265,6 +221,13 @@ def run_import(csv_path):
         print("\nSkipped:")
         for s in skipped:
             print(f"  Row {s.get('row')} | {s.get('name','')} | {s.get('email','')} → {s.get('reason','')}")
+
+    return {
+        "created":  len(created),
+        "skipped":  len(skipped),
+        "errors":   len(errors),
+        "error_list": errors,
+    }
 
 
 if __name__ == "__main__":

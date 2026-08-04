@@ -7,3 +7,4 @@ __pycache__/
 *.pyc
 SM-Importer/Files/
 DealsBackend/config.js
+SM-Importer/.env.example

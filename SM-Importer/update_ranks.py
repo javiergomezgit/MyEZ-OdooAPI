@@ -30,30 +30,10 @@ import urllib.error
 import urllib.request
 from datetime import datetime, timezone
 
-from dotenv import load_dotenv
-
-load_dotenv(dotenv_path=".env")
-
 import firebase_admin
-from firebase_admin import credentials, db
+from firebase_admin import db
 
-
-# ----------------------------------------------------------------
-# FIREBASE SETUP
-# ----------------------------------------------------------------
-
-def init_firebase():
-    key_json = os.getenv("FIREBASE_SERVICE_ACCOUNT")
-    if key_json:
-        key_dict = json.loads(base64.b64decode(key_json).decode("utf-8"))
-        cred = credentials.Certificate(key_dict)
-    else:
-        cred = credentials.Certificate("security/firebase-service-account.json")
-
-    firebase_admin.initialize_app(cred, {
-        "databaseURL": "https://myezfirebase.firebaseio.com"
-    })
-    print("✅ Firebase initialized\n")
+from utils import init_firebase
 
 
 # ----------------------------------------------------------------
@@ -85,8 +65,8 @@ def get_rank(weight):
     return "heavyweight"
 
 
-def get_access_token():
-    """Get OAuth2 access token for FCM API."""
+def _get_fresh_access_token():
+    """Fetch a new OAuth2 bearer token for the FCM v1 API."""
     import google.auth.transport.requests
     from google.oauth2 import service_account
 
@@ -105,6 +85,19 @@ def get_access_token():
     request = google.auth.transport.requests.Request()
     cred.refresh(request)
     return cred.token
+
+
+# Token cached for the lifetime of this process run — avoids one
+# OAuth round-trip per user when many rank changes occur in a batch.
+_fcm_access_token = None
+
+
+def get_access_token():
+    """Return the cached FCM access token, fetching it once per process run."""
+    global _fcm_access_token
+    if _fcm_access_token is None:
+        _fcm_access_token = _get_fresh_access_token()
+    return _fcm_access_token
 
 
 def send_rank_notifications(uid, name, new_rank, fcm_tokens):
@@ -237,6 +230,14 @@ def run_update_ranks():
         print("\nErrors:")
         for e in errors:
             print(f"  {e['email']} → {e['error']}")
+
+    return {
+        "ranks_updated": len(updated),
+        "no_change":     len(unchanged),
+        "errors":        len(errors),
+        "updated_list":  updated,
+        "error_list":    errors,
+    }
 
 
 # ----------------------------------------------------------------

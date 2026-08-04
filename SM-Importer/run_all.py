@@ -23,6 +23,7 @@ Requirements:
 """
 
 import argparse
+import importlib.util
 import os
 import sys
 import time
@@ -47,11 +48,26 @@ def print_step(step, total, name):
     print(f"{'─' * 60}\n")
 
 
+def _load_module(name):
+    """Load a script from the SM-Importer directory as a module."""
+    spec = importlib.util.spec_from_file_location(
+        name, os.path.join(script_dir, f"{name}.py")
+    )
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
 def run_all(customers_csv, purchases_csv):
     start_time = time.time()
     now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
 
     print_header(f"MyEZ MASTER IMPORT — {now}")
+
+    # Initialize Firebase once — all modules share the same app via the
+    # guard in utils.init_firebase(), so no delete/reinit hacks are needed.
+    from utils import init_firebase
+    init_firebase()
 
     total_steps = 0
     if customers_csv:
@@ -61,6 +77,7 @@ def run_all(customers_csv, purchases_csv):
     total_steps += 2  # update_ranks + update_leaderboard always run
 
     current_step = 0
+    results = {}
 
     # ----------------------------------------------------------------
     # STEP 1 — Customers
@@ -69,25 +86,11 @@ def run_all(customers_csv, purchases_csv):
         current_step += 1
         print_step(current_step, total_steps, "sm_customers.py — Import Users")
         try:
-            import firebase_admin
-            # Reset firebase app if already initialized
-            try:
-                firebase_admin.get_app()
-                firebase_admin.delete_app(firebase_admin.get_app())
-            except ValueError:
-                pass
-
-            import importlib.util
-            spec = importlib.util.spec_from_file_location(
-                "sm_customers",
-                os.path.join(script_dir, "sm_customers.py")
-            )
-            mod = importlib.util.module_from_spec(spec)
-            spec.loader.exec_module(mod)
-            mod.init_firebase()
-            mod.run_import(customers_csv)
+            mod = _load_module("sm_customers")
+            results["customers"] = mod.run_import(customers_csv)
         except Exception as e:
             print(f"❌ sm_customers.py failed: {e}")
+            results["customers"] = {"error": str(e)}
             print("Continuing to next step...\n")
 
     # ----------------------------------------------------------------
@@ -97,23 +100,11 @@ def run_all(customers_csv, purchases_csv):
         current_step += 1
         print_step(current_step, total_steps, "sm_purchases.py — Import Purchases")
         try:
-            import firebase_admin
-            try:
-                firebase_admin.delete_app(firebase_admin.get_app())
-            except (ValueError, Exception):
-                pass
-
-            import importlib.util
-            spec = importlib.util.spec_from_file_location(
-                "sm_purchases",
-                os.path.join(script_dir, "sm_purchases.py")
-            )
-            mod = importlib.util.module_from_spec(spec)
-            spec.loader.exec_module(mod)
-            mod.init_firebase()
-            mod.run_purchases(purchases_csv)
+            mod = _load_module("sm_purchases")
+            results["purchases"] = mod.run_purchases(purchases_csv)
         except Exception as e:
             print(f"❌ sm_purchases.py failed: {e}")
+            results["purchases"] = {"error": str(e)}
             print("Continuing to next step...\n")
 
     # ----------------------------------------------------------------
@@ -122,23 +113,11 @@ def run_all(customers_csv, purchases_csv):
     current_step += 1
     print_step(current_step, total_steps, "update_ranks.py — Recalculate Ranks + FCM")
     try:
-        import firebase_admin
-        try:
-            firebase_admin.delete_app(firebase_admin.get_app())
-        except (ValueError, Exception):
-            pass
-
-        import importlib.util
-        spec = importlib.util.spec_from_file_location(
-            "update_ranks",
-            os.path.join(script_dir, "update_ranks.py")
-        )
-        mod = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(mod)
-        mod.init_firebase()
-        mod.run_update_ranks()
+        mod = _load_module("update_ranks")
+        results["ranks"] = mod.run_update_ranks()
     except Exception as e:
         print(f"❌ update_ranks.py failed: {e}")
+        results["ranks"] = {"error": str(e)}
         print("Continuing to next step...\n")
 
     # ----------------------------------------------------------------
@@ -147,34 +126,70 @@ def run_all(customers_csv, purchases_csv):
     current_step += 1
     print_step(current_step, total_steps, "update_leaderboard.py — Recalculate Leaderboard")
     try:
-        import firebase_admin
-        try:
-            firebase_admin.delete_app(firebase_admin.get_app())
-        except (ValueError, Exception):
-            pass
-
-        import importlib.util
-        spec = importlib.util.spec_from_file_location(
-            "update_leaderboard",
-            os.path.join(script_dir, "update_leaderboard.py")
-        )
-        mod = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(mod)
-        mod.init_firebase()
-        mod.run_update_leaderboard()
+        mod = _load_module("update_leaderboard")
+        results["leaderboard"] = mod.run_update_leaderboard()
     except Exception as e:
         print(f"❌ update_leaderboard.py failed: {e}")
+        results["leaderboard"] = {"error": str(e)}
 
     # ----------------------------------------------------------------
-    # FINAL SUMMARY
+    # MASTER SUMMARY
     # ----------------------------------------------------------------
     elapsed = round(time.time() - start_time, 1)
-    print_header(f"IMPORT COMPLETE — {elapsed}s")
-    print(f"  Customers CSV:  {customers_csv or 'skipped'}")
-    print(f"  Purchases CSV:  {purchases_csv or 'skipped'}")
-    print(f"  Ranks:          updated")
-    print(f"  Leaderboard:    updated")
-    print(f"\n  Total time: {elapsed} seconds")
+    print_header(f"MASTER SUMMARY — {elapsed}s")
+
+    all_errors = []  # collect every error detail across all steps
+
+    # Customers
+    c = results.get("customers")
+    if c:
+        if "error" in c:
+            print(f"  👤 Customers:     ❌ FAILED — {c['error']}")
+        else:
+            print(f"  👤 Customers:     ✅ {c['created']} created  |  ⏭  {c['skipped']} skipped  |  ❌ {c['errors']} errors")
+            for e in c.get("error_list", []):
+                all_errors.append(f"  [Customers] Row {e.get('row','?')} | {e.get('name','')} | {e.get('email','')}  →  {e.get('error','')}")
+
+    # Purchases
+    p = results.get("purchases")
+    if p:
+        if "error" in p:
+            print(f"  🛒 Purchases:     ❌ FAILED — {p['error']}")
+        else:
+            print(f"  🛒 Purchases:     ✅ {p['rows_processed']} rows  |  👤 {p['users_updated']} users updated  |  ⏭  {p['skipped']} skipped  |  ❌ {p['errors']} errors")
+            for e in p.get("error_list", []):
+                all_errors.append(f"  [Purchases] {e.get('email','')}  →  {e.get('error','')}")
+
+    # Ranks
+    r = results.get("ranks")
+    if r:
+        if "error" in r:
+            print(f"  🏆 Ranks:         ❌ FAILED — {r['error']}")
+        else:
+            print(f"  🏆 Ranks:         ✅ {r['ranks_updated']} updated  |  — {r['no_change']} unchanged  |  ❌ {r['errors']} errors")
+            if r.get("updated_list"):
+                for u in r["updated_list"]:
+                    print(f"       ↑ {u['email']}  {u['previous_rank']} → {u['new_rank']}  ({u['weight']} lbs)")
+            for e in r.get("error_list", []):
+                all_errors.append(f"  [Ranks] {e.get('email','')}  →  {e.get('error','')}")
+
+    # Leaderboard
+    lb = results.get("leaderboard")
+    if lb:
+        if "error" in lb:
+            print(f"  📊 Leaderboard:   ❌ FAILED — {lb['error']}")
+        else:
+            print(f"  📊 Leaderboard:   ✅ {lb['months_written']} months written  |  👤 {lb['users_processed']} users  |  ❌ {lb['errors']} errors")
+            for e in lb.get("error_list", []):
+                all_errors.append(f"  [Leaderboard] Month {e.get('month','?')}  →  {e.get('error','')}")
+
+    # Print all errors in one block at the bottom
+    if all_errors:
+        print(f"\n  ── ERRORS ({len(all_errors)}) ──────────────────────────────────")
+        for msg in all_errors:
+            print(f"  ❌ {msg}")
+
+    print(f"\n  Total time: {elapsed}s")
 
 
 # ----------------------------------------------------------------

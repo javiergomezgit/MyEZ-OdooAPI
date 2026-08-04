@@ -22,44 +22,24 @@ Requirements:
 """
 
 import argparse
-import base64
 import csv
-import json
 import os
 import re
 import sys
 from datetime import datetime, timezone
 
-from dotenv import load_dotenv
-
-load_dotenv(dotenv_path=".env")
-
 import firebase_admin
-from firebase_admin import auth, credentials, db
+from firebase_admin import auth, db
 
-
-# ----------------------------------------------------------------
-# FIREBASE SETUP
-# ----------------------------------------------------------------
-
-def init_firebase():
-    key_json = os.getenv("FIREBASE_SERVICE_ACCOUNT")
-    if key_json:
-        key_dict = json.loads(base64.b64decode(key_json).decode("utf-8"))
-        cred = credentials.Certificate(key_dict)
-    else:
-        cred = credentials.Certificate("security/firebase-service-account.json")
-
-    firebase_admin.initialize_app(cred, {
-        "databaseURL": "https://myezfirebase.firebaseio.com"
-    })
-    print("✅ Firebase initialized\n")
-
-
-# ----------------------------------------------------------------
-# WEIGHT THRESHOLD
-# ----------------------------------------------------------------
-INFLATABLE_WEIGHT_THRESHOLD = 54  # lbs — items at or above this are inflatables
+from utils import (
+    init_firebase,
+    clean_email,
+    parse_date_to_unix,
+    INFLATABLE_WEIGHT_THRESHOLD,
+    is_inflatable,
+    calculate_score,
+    clean_sku,
+)
 
 
 # ----------------------------------------------------------------
@@ -83,32 +63,6 @@ def clean_weight(weight_str):
         return float(weight_str.strip())
     except Exception:
         return 0
-
-
-def clean_email(email_str):
-    if not email_str:
-        return ""
-    # Handle multiple emails separated by comma or semicolon
-    email = re.split(r"[,;]", email_str.strip())[0].strip().lower()
-    # Validate basic email format
-    if not re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", email):
-        return ""
-    return email
-
-
-def parse_date_to_unix(date_str):
-    if not date_str:
-        return int(datetime.now(timezone.utc).timestamp())
-    try:
-        dt = datetime.strptime(date_str.strip(), "%m/%d/%Y")
-        return int(dt.replace(tzinfo=timezone.utc).timestamp())
-    except Exception:
-        return int(datetime.now(timezone.utc).timestamp())
-
-
-def is_inflatable(weight):
-    """Returns True if weight qualifies as an inflatable."""
-    return weight >= INFLATABLE_WEIGHT_THRESHOLD
 
 
 def get_uid_by_email(email):
@@ -139,18 +93,6 @@ def transaction_exists(uid, transaction_id):
         return False
 
 
-def calculate_score(weight, total):
-    """
-    Calculate score for a single transaction.
-    - weight >= 54 (inflatable): int(weight * 0.25)
-    - weight < 54 (accessory/money): int(total * 0.50)
-    """
-    if is_inflatable(weight):
-        return int(weight * 0.25)
-    else:
-        return int(total * 0.50)
-
-
 # ----------------------------------------------------------------
 # MAIN
 # ----------------------------------------------------------------
@@ -160,7 +102,6 @@ def run_purchases(csv_path):
 
     user_updates = {}
     skipped = []
-    red_flags = []
     processed_rows = 0
     errors = []
 
@@ -169,9 +110,7 @@ def run_purchases(csv_path):
 
         for i, row in enumerate(reader, start=1):
             transaction_id = (row.get("transaction_id") or "").strip()
-            sku            = (row.get("SKU") or "").strip()
-            if sku.upper().endswith("-TX"):
-                sku = sku[:-3]
+            sku            = clean_sku((row.get("SKU") or "").strip())
             sold_str   = (row.get("Sold") or "").strip()
             total      = clean_total(row.get("Total") or "")
             weight     = clean_weight(row.get("Weight") or "")
@@ -196,12 +135,6 @@ def run_purchases(csv_path):
             if not transaction_id:
                 print(f"  ⚠ No transaction_id — skipping")
                 skipped.append({"row": i, "txn": transaction_id, "email": email, "reason": "no transaction_id"})
-                continue
-
-            # Red flag: weight == 0 and total > 1000
-            if weight == 0 and total > 1000:
-                print(f"  🚩 RED FLAG: weight=0 but total=${total} > 1000 — data entry error, skipping")
-                red_flags.append({"row": i, "txn": transaction_id, "sku": sku, "email": email, "total": total})
                 continue
 
             # Parse sold quantity
@@ -327,13 +260,7 @@ def run_purchases(csv_path):
     print(f"✅ Rows processed:  {processed_rows}")
     print(f"👤 Users updated:   {len(updated)}")
     print(f"⏭  Skipped:         {len(skipped)}")
-    print(f"🚩 Red flags:       {len(red_flags)}")
     print(f"❌ Errors:          {len(errors)}")
-
-    if red_flags:
-        print("\n🚩 Red Flags (check data entry in SM):")
-        for r in red_flags:
-            print(f"  Row {r['row']} | txn={r['txn']} | {r['sku']} | {r['email']} | total=${r['total']}")
 
     if skipped:
         print("\nSkipped:")
@@ -344,6 +271,15 @@ def run_purchases(csv_path):
         print("\nErrors:")
         for e in errors:
             print(f"  {e['email']} → {e['error']}")
+
+    return {
+        "rows_processed": processed_rows,
+        "users_updated":  len(updated),
+        "skipped":        len(skipped),
+        "errors":         len(errors),
+        "error_list":     errors,
+        "updated_list":   updated,
+    }
 
 
 # ----------------------------------------------------------------
