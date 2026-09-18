@@ -45,7 +45,9 @@ def init_firebase():
         key_dict = json.loads(base64.b64decode(key_json).decode("utf-8"))
         cred = credentials.Certificate(key_dict)
     else:
-        cred = credentials.Certificate("security/firebase-service-account.json")
+        # Resolve relative to the repo root (one level above this file)
+        repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        cred = credentials.Certificate(os.path.join(repo_root, "security", "firebase-service-account.json"))
 
     firebase_admin.initialize_app(cred, {"databaseURL": DATABASE_URL})
     print("✅ Firebase initialized\n")

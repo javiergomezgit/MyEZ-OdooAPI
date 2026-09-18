@@ -162,9 +162,11 @@ rank_cache/
 | Middleweight | 9,000 lb | 6% |
 | Heavyweight | 13,000+ lb | 7% |
 
-- Rank is permanent — based on cumulative owned weight, never resets
-- `typeuser` in Firebase stores the current rank name
+- Rank is permanent — based on cumulative EZ fleet weight, never resets
+- **Phase 1:** Rank is display-only — tier name and weight shown, no discounts active
+- **Phase 2:** Discounts activate automatically on tier crossing
 - Tier promotion triggers push via `/notify/user/{partner_id}`
+- `typeuser` in Firebase stores the current rank name
 - Defined in `core/config.py` as `RANK_TIERS`
 
 ---
@@ -191,11 +193,11 @@ Shopify customer/create event
   → create res.partner + res.users in Odoo
   → write Firebase entry (createdIn: "shopify")
 
-Odoo invoice confirmed (Phase 2)
+Odoo invoice confirmed (Phase 4 — Full Odoo Integration)
   → Cloud Run odoo-sync
   → writes owned_weight + units to Firebase
   → writes rank back to res.partner
-  → rank changed → POST /notify/user/{partner_id}
+  → rank changed → POST /notify/user/{partner_id} (Phase 2 — when discounts activate)
   → FCM v1 → APNs → iPhone
 ```
 
