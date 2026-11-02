@@ -114,6 +114,7 @@
     .empty-state { text-align: center; padding: 48px; color: #8e8e93; font-size: 14px; }
     .loading { text-align: center; padding: 24px; color: #8e8e93; }
     .error-msg { color: #ff453a; font-size: 13px; margin-top: 6px; }
+    .success-msg { color: #30d158; font-size: 13px; margin-top: 6px; }
     .hint { font-size: 12px; color: #555; margin-top: 4px; }
   </style>
 </head>
@@ -132,8 +133,12 @@
       <input type="password" id="login-password" placeholder="••••••••" />
     </div>
     <div class="error-msg" id="login-error"></div>
+    <div class="success-msg" id="login-success"></div>
     <br/>
     <button class="btn btn-primary" id="login-btn">Sign In</button>
+    <div style="text-align:center;margin-top:16px;">
+      <button id="forgot-btn" style="background:none;border:none;color:#8e8e93;font-size:13px;cursor:pointer;text-decoration:underline;padding:0;">Forgot password?</button>
+    </div>
   </div>
 </div>
 
@@ -446,7 +451,7 @@
 <script src="config.js"></script>
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-  import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged }
+  import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged, sendPasswordResetEmail }
     from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
   import { getDatabase, ref, set, get, remove, onValue }
     from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
@@ -532,6 +537,23 @@
   document.getElementById('logout-btn').addEventListener('click', () => signOut(auth));
   document.getElementById('login-password').addEventListener('keydown', e => {
     if (e.key === 'Enter') document.getElementById('login-btn').click();
+  });
+
+  document.getElementById('forgot-btn').addEventListener('click', async () => {
+    const email = document.getElementById('login-email').value.trim();
+    const errorEl = document.getElementById('login-error');
+    const successEl = document.getElementById('login-success');
+    errorEl.textContent = '';
+    successEl.textContent = '';
+    if (!email) { errorEl.textContent = 'Enter your email address first.'; return; }
+    try {
+      await sendPasswordResetEmail(auth, email);
+      successEl.textContent = 'Password reset email sent — check your inbox.';
+    } catch (e) {
+      errorEl.textContent = e.code === 'auth/user-not-found'
+        ? 'No account found with that email.'
+        : 'Failed to send reset email. Try again.';
+    }
   });
 
   // LOAD DEALS
