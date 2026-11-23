@@ -58,7 +58,7 @@ def _load_module(name):
     return mod
 
 
-def run_all(customers_csv, purchases_csv):
+def run_all(customers_csv, purchases_csv, notify=False):
     start_time = time.time()
     now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
 
@@ -84,12 +84,14 @@ def run_all(customers_csv, purchases_csv):
     # ----------------------------------------------------------------
     if customers_csv:
         current_step += 1
-        print_step(current_step, total_steps, "sm_customers.py — Import Users")
+        module_name = "sm_customers_email" if notify else "sm_customers"
+        label = "sm_customers_email.py — Import Users + Send Emails" if notify else "sm_customers.py — Import Users"
+        print_step(current_step, total_steps, label)
         try:
-            mod = _load_module("sm_customers")
+            mod = _load_module(module_name)
             results["customers"] = mod.run_import(customers_csv)
         except Exception as e:
-            print(f"❌ sm_customers.py failed: {e}")
+            print(f"❌ {module_name}.py failed: {e}")
             results["customers"] = {"error": str(e)}
             print("Continuing to next step...\n")
 
@@ -146,9 +148,12 @@ def run_all(customers_csv, purchases_csv):
         if "error" in c:
             print(f"  👤 Customers:     ❌ FAILED — {c['error']}")
         else:
-            print(f"  👤 Customers:     ✅ {c['created']} created  |  ⏭  {c['skipped']} skipped  |  ❌ {c['errors']} errors")
+            email_line = f"  |  📧 {c['email_sent']} emailed  |  ⚠ {c['email_fail']} email failed" if "email_sent" in c else ""
+            print(f"  👤 Customers:     ✅ {c['created']} created  |  ⏭  {c['skipped']} skipped  |  ❌ {c['errors']} errors{email_line}")
             for e in c.get("error_list", []):
                 all_errors.append(f"  [Customers] Row {e.get('row','?')} | {e.get('name','')} | {e.get('email','')}  →  {e.get('error','')}")
+            for e in c.get("email_fail_list", []):
+                all_errors.append(f"  [Email] {e.get('email','')}  →  {e.get('error','')}")
 
     # Purchases
     p = results.get("purchases")
@@ -199,6 +204,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="MyEZ master import — runs all 4 scripts in order")
     parser.add_argument("--customers", default=None, help="Path to customers CSV file")
     parser.add_argument("--purchases", default=None, help="Path to purchases CSV file")
+    parser.add_argument("--notify", action="store_true", help="Send welcome email to each new customer")
     args = parser.parse_args()
 
     if not args.customers and not args.purchases:
@@ -213,4 +219,4 @@ if __name__ == "__main__":
         print(f"❌ Purchases file not found: {args.purchases}")
         sys.exit(1)
 
-    run_all(args.customers, args.purchases)
+    run_all(args.customers, args.purchases, notify=args.notify)

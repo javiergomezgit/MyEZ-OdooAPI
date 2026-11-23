@@ -211,12 +211,23 @@ myez-odoo-api/
 ├── core/
 │   ├── config.py             — env vars, RANK_TIERS
 │   └── helpers.py            — Odoo, Firebase, FCM, Dropbox utils
-└── routers/
-    ├── shopify.py            — POST /shopify/customer-created
-    ├── clients.py            — GET /clients/*
-    ├── products.py           — GET /products, /image/{sku}
-    ├── notifications.py      — POST /notify, /register-token
-    └── gamification.py       — POST /gamification/check-rank-changes
+├── routers/
+│   ├── shopify.py            — POST /shopify/customer-created
+│   ├── clients.py            — GET /clients/*
+│   ├── products.py           — GET /products, /image/{sku}
+│   ├── notifications.py      — POST /notify, /register-token
+│   └── gamification.py       — POST /gamification/check-rank-changes
+└── SM-Importer/              — Offline CSV import pipeline (Sales Master)
+    ├── utils.py              — shared helpers (Firebase init, scoring, SKU clean)
+    ├── run_all.py            — master runner: executes all 4 phases in order
+    ├── sm_customers.py       — Phase 1: create Firebase Auth users (silent)
+    ├── sm_customers_email.py — Phase 1 (notify): create users + send welcome email
+    ├── sm_purchases.py       — Phase 2: import transactions, update owned_weight
+    ├── update_ranks.py       — Phase 3: recalculate rank tiers, send FCM on rank-up
+    ├── update_leaderboard.py — Phase 4: recalculate monthly leaderboard scores
+    ├── send_welcome_emails.py — standalone: send setup emails to existing customers
+    ├── gmail_auth_setup.py   — one-time Gmail OAuth2 setup
+    └── .env.example          — required env vars template
 ```
 
 ---
@@ -248,6 +259,16 @@ myez-odoo-api/
 | `SHOPIFY_WEBHOOK_SECRET` | HMAC-SHA256 webhook verification |
 | `CACHE_BUST` | Increment to force Railway rebuild |
 
+### SM-Importer (.env)
+
+| Variable | Purpose |
+|---|---|
+| `FIREBASE_SERVICE_ACCOUNT` | Base64-encoded service account JSON (or place file at `security/firebase-service-account.json`) |
+| `GMAIL_REFRESH_TOKEN` | Gmail OAuth2 refresh token (run `gmail_auth_setup.py` once) |
+| `GMAIL_CLIENT_ID` | Gmail OAuth2 client ID |
+| `GMAIL_CLIENT_SECRET` | Gmail OAuth2 client secret |
+| `GMAIL_SENDER` | Sender email address |
+
 ---
 
 ## Security
@@ -257,6 +278,38 @@ myez-odoo-api/
 - Dropbox token auto-refreshed server-side — never exposed to iOS
 - Shopify webhook verified via HMAC-SHA256 signature
 - `.gitignore` excludes all secrets
+
+---
+
+## SM-Importer — Usage
+
+Offline CSV import pipeline that creates Firebase users from a Sales Master export and
+sends welcome emails. Must run from the `SM-Importer/` directory.
+
+```bash
+cd SM-Importer
+
+# Full import (customers + purchases + ranks + leaderboard)
+python3 run_all.py --customers Orders.csv --purchases OrderedItemsList.csv
+
+# Full import with welcome email to each new customer
+python3 run_all.py --customers Orders.csv --purchases OrderedItemsList.csv --notify
+
+# Customers only (no purchases)
+python3 run_all.py --customers Orders.csv --notify
+
+# Send setup emails to an existing customer list (CSV: email, name, company)
+python3 send_welcome_emails.py --csv existing-customers.csv
+```
+
+**Scoring:**
+- Inflatables (weight ≥ 54 lbs): `$5 = 1 pt`
+- Accessories (weight < 54 lbs): `$2 = 1 pt`
+
+**One-time Gmail OAuth2 setup** (required for `--notify` and `send_welcome_emails.py`):
+```bash
+python3 gmail_auth_setup.py
+```
 
 ---
 
